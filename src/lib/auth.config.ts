@@ -5,6 +5,9 @@ import type { NextAuthConfig } from "next-auth";
 // addons nativos de Node como el motor de Prisma). auth.ts la extiende
 // agregando el provider de credenciales para el resto de la app.
 export const authConfig: NextAuthConfig = {
+  // Necesario fuera de Vercel (Netlify, etc.) para que NextAuth confíe en el
+  // host que le llega desde el proxy de la plataforma.
+  trustHost: true,
   pages: {
     signIn: "/admin/login",
   },
