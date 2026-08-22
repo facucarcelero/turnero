@@ -1,0 +1,192 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum AppointmentSource {
+  ONLINE
+  ADMIN
+}
+
+enum AdminRole {
+  OWNER
+  ADMIN
+  STAFF
+}
+
+// ============================================================
+// CLINIC / CONFIGURATION (singleton row, id = 1)
+// ============================================================
+
+model Clinic {
+  id                Int      @id @default(autoincrement())
+  name              String   @default("Mi Clínica")
+  tagline           String   @default("Turnos online las 24 horas")
+  logoUrl           String?
+  primaryColor      String   @default("#0d9488")
+  address           String?
+  phone             String?
+  whatsapp          String?
+  email             String?
+  instagram         String?
+  timezone          String   @default("America/Argentina/Buenos_Aires")
+  slotDurationMin   Int      @default(30)
+  minNoticeHours    Int      @default(2)
+  maxAdvanceDays    Int      @default(60)
+  allowCancelation  Boolean  @default(true)
+  cancelNoticeHours Int      @default(24)
+  currency          String   @default("ARS")
+  welcomeMessage    String   @default("Reservá tu turno online en simples pasos.")
+  updatedAt         DateTime @updatedAt
+}
+
+// ============================================================
+// USERS (admin / staff)
+// ============================================================
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         AdminRole @default(STAFF)
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+}
+
+// ============================================================
+// PROFESSIONALS
+// ============================================================
+
+model Professional {
+  id            String         @id @default(cuid())
+  name          String
+  specialty     String?
+  bio           String?
+  photoUrl      String?
+  color         String         @default("#0d9488")
+  active        Boolean        @default(true)
+  order         Int            @default(0)
+  services      Service[]      @relation("ProfessionalServices")
+  workingHours  WorkingHour[]
+  blockedSlots  BlockedSlot[]
+  appointments  Appointment[]
+  createdAt     DateTime       @default(now())
+}
+
+// ============================================================
+// SERVICES (tipos de consulta)
+// ============================================================
+
+model Service {
+  id            String         @id @default(cuid())
+  name          String
+  description   String?
+  durationMin   Int            @default(30)
+  price         Float          @default(0)
+  color         String         @default("#0d9488")
+  active        Boolean        @default(true)
+  order         Int            @default(0)
+  professionals Professional[] @relation("ProfessionalServices")
+  appointments  Appointment[]
+  createdAt     DateTime       @default(now())
+}
+
+// ============================================================
+// WORKING HOURS (horario semanal recurrente por profesional)
+// ============================================================
+
+model WorkingHour {
+  id             String       @id @default(cuid())
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  professionalId String
+  weekday        Int // 0 = domingo ... 6 = sábado
+  startTime      String // "09:00"
+  endTime        String // "13:00"
+  active         Boolean      @default(true)
+
+  @@index([professionalId, weekday])
+}
+
+// ============================================================
+// BLOCKED SLOTS (feriados, vacaciones, bloqueos puntuales)
+// ============================================================
+
+model BlockedSlot {
+  id             String        @id @default(cuid())
+  professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  professionalId String?
+  date           String // "2026-08-21"
+  startTime      String? // null = todo el día
+  endTime        String?
+  reason         String?
+  createdAt      DateTime      @default(now())
+
+  @@index([professionalId, date])
+}
+
+// ============================================================
+// PATIENTS
+// ============================================================
+
+model Patient {
+  id           String        @id @default(cuid())
+  firstName    String
+  lastName     String
+  dni          String?
+  phone        String
+  email        String?
+  birthDate    String?
+  notes        String?
+  appointments Appointment[]
+  createdAt    DateTime      @default(now())
+
+  @@index([phone])
+  @@index([dni])
+}
+
+// ============================================================
+// APPOINTMENTS
+// ============================================================
+
+model Appointment {
+  id             String            @id @default(cuid())
+  patient        Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId      String
+  professional   Professional      @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  professionalId String
+  service        Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceId      String
+  date           String // "2026-08-21"
+  startTime      String // "09:00"
+  endTime        String // "09:30"
+  status         AppointmentStatus @default(PENDING)
+  source         AppointmentSource @default(ONLINE)
+  notes          String?
+  cancelReason   String?
+  cancelToken    String            @unique @default(cuid())
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([date, professionalId])
+  @@index([patientId])
+}

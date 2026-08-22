@@ -1,0 +1,268 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { getAvailableSlots } from "@/lib/availability";
+import type { AppointmentStatus } from "@prisma/client";
+
+export type BookingPayload = {
+  professionalId: string;
+  serviceId: string;
+  date: string;
+  startTime: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email?: string;
+  dni?: string;
+  notes?: string;
+};
+
+export async function createPublicAppointment(payload: BookingPayload) {
+  const {
+    professionalId,
+    serviceId,
+    date,
+    startTime,
+    firstName,
+    lastName,
+    phone,
+    email,
+    dni,
+    notes,
+  } = payload;
+
+  if (!professionalId || !serviceId || !date || !startTime) {
+    return { error: "Faltan datos del turno. Volvé a intentar." };
+  }
+  if (!firstName?.trim() || !lastName?.trim() || !phone?.trim()) {
+    return { error: "Completá nombre, apellido y teléfono." };
+  }
+
+  const service = await prisma.service.findUnique({ where: { id: serviceId } });
+  if (!service) return { error: "El servicio seleccionado ya no existe." };
+
+  // Revalidamos disponibilidad en el servidor para evitar dobles reservas (race conditions).
+  const availableSlots = await getAvailableSlots(professionalId, serviceId, date);
+  const stillAvailable = availableSlots.some((s) => s.startTime === startTime);
+  if (!stillAvailable) {
+    return {
+      error:
+        "Ese horario ya no está disponible. Por favor elegí otro horario.",
+      stale: true,
+    };
+  }
+
+  const endTime = availableSlots.find((s) => s.startTime === startTime)!.endTime;
+
+  let patient = null;
+  if (dni?.trim()) {
+    patient = await prisma.patient.findFirst({ where: { dni: dni.trim() } });
+  }
+  if (!patient) {
+    patient = await prisma.patient.findFirst({ where: { phone: phone.trim() } });
+  }
+
+  if (patient) {
+    patient = await prisma.patient.update({
+      where: { id: patient.id },
+      data: {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phone: phone.trim(),
+        email: email?.trim() || patient.email,
+        dni: dni?.trim() || patient.dni,
+      },
+    });
+  } else {
+    patient = await prisma.patient.create({
+      data: {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phone: phone.trim(),
+        email: email?.trim() || undefined,
+        dni: dni?.trim() || undefined,
+      },
+    });
+  }
+
+  const appointment = await prisma.appointment.create({
+    data: {
+      professionalId,
+      serviceId,
+      patientId: patient.id,
+      date,
+      startTime,
+      endTime,
+      notes: notes?.trim() || undefined,
+      status: "PENDING",
+      source: "ONLINE",
+    },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/agenda");
+  revalidatePath("/admin/turnos");
+
+  return { success: true, appointmentId: appointment.id, cancelToken: appointment.cancelToken };
+}
+
+export async function cancelAppointmentByToken(token: string, reason?: string) {
+  const appointment = await prisma.appointment.findUnique({ where: { cancelToken: token } });
+  if (!appointment) return { error: "Turno no encontrado." };
+  if (appointment.status === "CANCELLED") return { success: true };
+
+  await prisma.appointment.update({
+    where: { id: appointment.id },
+    data: { status: "CANCELLED", cancelReason: reason || "Cancelado por el paciente" },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/agenda");
+  revalidatePath("/admin/turnos");
+  return { success: true };
+}
+
+export async function findAppointmentsByContact(phone: string, dni?: string) {
+  const appointments = await prisma.appointment.findMany({
+    where: {
+      OR: [
+        { patient: { phone: phone.trim() } },
+        dni ? { patient: { dni: dni.trim() } } : undefined,
+      ].filter(Boolean) as object[],
+    },
+    include: { service: true, professional: true, patient: true },
+    orderBy: [{ date: "desc" }, { startTime: "desc" }],
+    take: 30,
+  });
+  return appointments;
+}
+
+// ---------------------------------------------------------------------------
+// Admin actions
+// ---------------------------------------------------------------------------
+
+export async function updateAppointmentStatus(id: string, status: AppointmentStatus, reason?: string) {
+  try {
+    await prisma.appointment.update({
+      where: { id },
+      data: { status, cancelReason: status === "CANCELLED" ? reason : undefined },
+    });
+  } catch {
+    return { error: "No se pudo actualizar el turno." };
+  }
+  revalidatePath("/admin");
+  revalidatePath("/admin/agenda");
+  revalidatePath("/admin/turnos");
+  return { success: true };
+}
+
+export async function deleteAppointment(id: string) {
+  await prisma.appointment.delete({ where: { id } });
+  revalidatePath("/admin");
+  revalidatePath("/admin/agenda");
+  revalidatePath("/admin/turnos");
+  return { success: true };
+}
+
+export type AdminAppointmentPayload = {
+  id?: string;
+  patientId?: string;
+  newPatient?: { firstName: string; lastName: string; phone: string; email?: string; dni?: string };
+  professionalId: string;
+  serviceId: string;
+  date: string;
+  startTime: string;
+  notes?: string;
+  status: AppointmentStatus;
+};
+
+export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
+  const { id, patientId, newPatient, professionalId, serviceId, date, startTime, notes, status } = payload;
+
+  if (!professionalId || !serviceId || !date || !startTime) {
+    return { error: "Completá todos los campos obligatorios." };
+  }
+
+  const service = await prisma.service.findUnique({ where: { id: serviceId } });
+  if (!service) return { error: "Servicio inválido." };
+
+  const [h, m] = startTime.split(":").map(Number);
+  const endMinutes = h * 60 + m + service.durationMin;
+  const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
+
+  let finalPatientId = patientId;
+  if (!finalPatientId && newPatient) {
+    if (!newPatient.firstName.trim() || !newPatient.lastName.trim() || !newPatient.phone.trim()) {
+      return { error: "Completá los datos del paciente." };
+    }
+    const patient = await prisma.patient.create({
+      data: {
+        firstName: newPatient.firstName.trim(),
+        lastName: newPatient.lastName.trim(),
+        phone: newPatient.phone.trim(),
+        email: newPatient.email?.trim() || undefined,
+        dni: newPatient.dni?.trim() || undefined,
+      },
+    });
+    finalPatientId = patient.id;
+  }
+
+  if (!finalPatientId) return { error: "Seleccioná o cargá un paciente." };
+
+  // Chequeo de superposición (excluyendo el propio turno si se está editando)
+  const overlapping = await prisma.appointment.findMany({
+    where: {
+      professionalId,
+      date,
+      status: { not: "CANCELLED" },
+      id: id ? { not: id } : undefined,
+    },
+  });
+  const startMin = h * 60 + m;
+  const hasOverlap = overlapping.some((a) => {
+    const [ah, am] = a.startTime.split(":").map(Number);
+    const [eh, em] = a.endTime.split(":").map(Number);
+    const aStart = ah * 60 + am;
+    const aEnd = eh * 60 + em;
+    return startMin < aEnd && endMinutes > aStart;
+  });
+  if (hasOverlap) {
+    return { error: "Ese horario se superpone con otro turno existente." };
+  }
+
+  if (id) {
+    await prisma.appointment.update({
+      where: { id },
+      data: {
+        patientId: finalPatientId,
+        professionalId,
+        serviceId,
+        date,
+        startTime,
+        endTime,
+        notes: notes?.trim() || null,
+        status,
+      },
+    });
+  } else {
+    await prisma.appointment.create({
+      data: {
+        patientId: finalPatientId,
+        professionalId,
+        serviceId,
+        date,
+        startTime,
+        endTime,
+        notes: notes?.trim() || undefined,
+        status,
+        source: "ADMIN",
+      },
+    });
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/agenda");
+  revalidatePath("/admin/turnos");
+  return { success: true };
+}
