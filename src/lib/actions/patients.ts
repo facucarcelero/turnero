@@ -54,11 +54,11 @@ export async function searchPatients(query: string) {
   return prisma.patient.findMany({
     where: {
       OR: [
-        { firstName: { contains: query } },
-        { lastName: { contains: query } },
+        { firstName: { contains: query, mode: "insensitive" } },
+        { lastName: { contains: query, mode: "insensitive" } },
         { phone: { contains: query } },
         { dni: { contains: query } },
-        { email: { contains: query } },
+        { email: { contains: query, mode: "insensitive" } },
       ],
     },
     orderBy: { createdAt: "desc" },

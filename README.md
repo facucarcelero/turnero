@@ -7,22 +7,30 @@ Optimizada **mobile-first**: tanto el sitio de reservas como el panel admin est�
 ## Stack técnico
 
 - **Next.js 16** (App Router, TypeScript) + **Tailwind CSS 4**
-- **Prisma** + **SQLite** (base de datos en un solo archivo, sin servidor externo que instalar)
+- **Prisma** + **PostgreSQL** (recomendado: [Neon](https://neon.tech), gratis y sin tarjeta — funciona en cualquier hosting, incluidos los serverless como Netlify o Vercel)
 - **NextAuth v5** (login del panel con email + contraseña)
 - **Server Actions** para toda la lógica de negocio (sin API REST intermedia)
 
 ## Puesta en marcha (primera vez)
 
-Requisito: [Node.js](https://nodejs.org) 20 o superior instalado.
+Requisito: [Node.js](https://nodejs.org) 20 o superior, y una base Postgres gratis en [neon.tech](https://neon.tech):
+
+1. Creá una cuenta en [neon.tech](https://neon.tech) (con GitHub o Google, sin tarjeta) y un proyecto nuevo.
+2. En el dashboard del proyecto, andá a **Connect** y copiá las dos cadenas de conexión:
+   - La que dice **Pooled connection** (el host tiene `-pooler` en el nombre) → pegala en `DATABASE_URL` en el archivo `.env`.
+   - La conexión **directa** (sin `-pooler`) → pegala en `DIRECT_URL` en `.env`.
+3. Instalá dependencias y aplicá el esquema:
 
 ```bash
 npm install
-npx prisma migrate dev
+npx prisma migrate dev --name init
 npm run db:seed
 npm run dev
 ```
 
 Esto deja el sitio corriendo en **http://localhost:2001**.
+
+> Podés usar esta misma base de Neon tanto para desarrollo local como para producción — para un proyecto de este tamaño no hace falta tener bases separadas, aunque si preferís separarlas simplemente creá un segundo proyecto en Neon para producción.
 
 El comando `db:seed` carga datos de ejemplo para que puedas ver la plataforma funcionando de inmediato:
 
@@ -92,15 +100,21 @@ Todos los cambios de Configuración se aplican al instante, sin reiniciar nada.
 5. En **Configuración → Usuarios del panel**, creá tu propio usuario y desactivá o eliminá el de ejemplo (`admin@clinica.com`).
 6. Si querés arrancar sin los datos de muestra, corré `npm run db:reset` y despues editá directamente desde el panel (o adaptá `prisma/seed.ts` con tus propios datos reales antes de sembrar).
 
-## Llevarla a producción
+## Llevarla a producción (Netlify)
 
-La base SQLite funciona perfecto para un servidor propio o una VPS (Railway, Render, un VPS con PM2, etc.) donde el archivo `prisma/dev.db` persiste en disco. Pasos generales:
+1. En **Netlify → Site settings → Environment variables** cargá:
+   - `DATABASE_URL` → la cadena **pooled** de Neon.
+   - `DIRECT_URL` → la cadena **directa** de Neon.
+   - `AUTH_SECRET` → generá uno nuevo y distinto al de desarrollo, por ejemplo con `openssl rand -base64 32` (o `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`).
+2. Comando de build: `npm run build` (ya configurado). El propio `npm install` genera el cliente de Prisma automáticamente.
+3. La primera vez (y cada vez que cambies el esquema), aplicá las migraciones contra la base de producción desde tu máquina:
+   ```bash
+   DATABASE_URL="<la pooled de Neon>" DIRECT_URL="<la directa de Neon>" npx prisma migrate deploy
+   ```
+   (o simplemente corré `npx prisma migrate deploy` con esas variables ya cargadas en tu `.env` si usás la misma base para todo).
+4. Redeploy en Netlify.
 
-1. `npm run build` y `npm run start` (o el proceso equivalente de tu hosting).
-2. Definí las variables de entorno `DATABASE_URL` y `AUTH_SECRET` (generá un secreto nuevo y único para producción, no reutilices el de desarrollo — podés generar uno con `openssl rand -base64 32`).
-3. Corré `npx prisma migrate deploy` para aplicar las migraciones en el servidor.
-
-Si vas a desplegar en una plataforma *serverless* (Vercel, etc.) donde el disco no persiste entre invocaciones, cambiá el datasource de Prisma a Postgres (por ejemplo con [Neon](https://neon.tech) o [Supabase](https://supabase.com), ambos con plan gratuito) en vez de SQLite — el resto del código no necesita cambios, solo `prisma/schema.prisma` (`provider = "postgresql"`) y la variable `DATABASE_URL`.
+El middleware (`src/proxy.ts`) usa una configuración de auth separada y liviana (`src/lib/auth.config.ts`), sin Prisma ni bcrypt, para no romper el runtime restringido de Netlify — no lo modifiques para que no vuelva a importar Prisma ahí.
 
 ---
 

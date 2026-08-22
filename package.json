@@ -10,9 +10,6 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
     "@prisma/client": "^6.19.3",
