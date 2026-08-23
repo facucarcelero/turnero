@@ -71,25 +71,38 @@ npm run db:reset
 
 - **`/`** — Portada con los datos de la clínica, profesionales y servicios.
 - **`/reservar`** — Asistente de reserva en 4 pasos: servicio → profesional (si hay más de uno) → día y horario → datos del paciente → confirmación.
-- **`/mis-turnos`** — El paciente busca sus turnos por teléfono (y DNI opcional) y puede cancelarlos si todavía está dentro del plazo permitido.
+- **`/mis-turnos`** — El paciente busca sus turnos por teléfono (y DNI opcional) y puede cancelarlos si todavía está dentro del plazo permitido. El dispositivo recuerda el teléfono usado (guardado sólo en el navegador del paciente) para no tener que volver a escribirlo en la próxima visita; hay un botón "Olvidar" para borrar ese dato del dispositivo en cualquier momento.
 
 El asistente de reserva sólo muestra horarios realmente libres: cruza el horario laboral del profesional, los turnos ya ocupados y los bloqueos/feriados cargados, y revalida todo en el servidor al confirmar (para que dos personas no puedan reservar el mismo horario por casualidad).
 
 ### 2. Panel administrativo — control total
 
-Entrá en **`/admin`** (te va a pedir login). En el celular vas a ver una barra de navegación abajo; en escritorio, un menú lateral.
+Entrá en **`/admin`** (te va a pedir login). En el celular vas a ver una barra de navegación abajo; en escritorio, un menú lateral. El menú y los permisos se ajustan automáticamente según el rol de quien inicia sesión (ver más abajo).
 
 - **Inicio** — Resumen del día: turnos de hoy, próximos 7 días, pendientes de confirmar, pacientes totales y la agenda del día con acceso rápido.
 - **Agenda** — Vista día por día (con selector rápido de fecha) por profesional. Desde acá cargás turnos "a mano", confirmás, marcás como atendido/no asistió, cancelás o editás cualquier turno.
 - **Turnos** — Listado completo con buscador y filtros (por estado, profesional, rango de fechas). Mismas acciones rápidas que en Agenda.
 - **Pacientes** — Alta, edición y ficha de cada paciente con su historial completo de turnos y notas/antecedentes. Tocando un paciente entrás a su detalle.
-- **Servicios** — Los tipos de consulta que se pueden reservar (nombre, duración, precio, color, y qué profesional/es lo hacen). Se pueden activar/desactivar sin borrarlos.
-- **Profesionales** — Alta de médicos/especialistas, cada uno con su color identificatorio.
+- **Servicios** — Los tipos de consulta que se pueden reservar (nombre, duración, precio, color, y qué profesional/es lo hacen). Se pueden activar/desactivar sin borrarlos. *(sólo Administrador/Dueño)*
+- **Profesionales** — Alta de médicos/especialistas, cada uno con su color identificatorio. *(sólo Administrador/Dueño)*
 - **Horarios** — Horario semanal de atención de cada profesional (podés cargar varias franjas por día, por ejemplo mañana y tarde, y copiar el horario a toda la semana con un clic).
 - **Bloqueos** — Feriados, vacaciones o bloqueos puntuales (de un profesional o de toda la clínica), de día completo o de un rango horario específico.
-- **Configuración** — Nombre, logo, color de marca, datos de contacto (incluye WhatsApp flotante en el sitio), y las reglas del sistema de reservas: duración de cada franja horaria, anticipación mínima para reservar, hasta cuántos días a futuro se puede reservar, y si se permite cancelar online (y con cuánta anticipación). También administrás los usuarios que acceden al panel (dueño/a, administrador o staff).
+- **Mi perfil** — *(sólo si tu usuario está vinculado a un profesional, ver abajo)* Editá tu propio nombre, especialidad, biografía, foto y color, y cambiá tu contraseña, sin depender de que un administrador lo haga por vos.
+- **Configuración** — Nombre, logo, color de marca, datos de contacto (incluye WhatsApp flotante en el sitio), y las reglas del sistema de reservas: duración de cada franja horaria, anticipación mínima para reservar, hasta cuántos días a futuro se puede reservar, y si se permite cancelar online (y con cuánta anticipación). *(sólo Administrador/Dueño; la gestión de usuarios del panel es exclusiva del Dueño/a)*
 
 Todos los cambios de Configuración se aplican al instante, sin reiniciar nada.
+
+### 3. Roles y autogestión de cada profesional
+
+Hay tres roles de usuario del panel:
+
+| Rol | Alcance |
+|---|---|
+| **Dueño/a (OWNER)** | Control total: además de todo lo de Administrador, crea/edita/elimina usuarios del panel y decide quién se vincula a qué profesional. |
+| **Administrador (ADMIN)** | Gestiona clínica, servicios, profesionales, horarios y agenda de todos. No puede tocar los usuarios del panel. |
+| **Staff (STAFF)** | Ve y gestiona turnos/agenda/pacientes. Si además está **vinculado a un profesional**, su acceso queda automáticamente acotado a su propia agenda, sus propios turnos y su propio horario, y gana la sección "Mi perfil" para autogestionar sus datos y contraseña — sin ver ni tocar la configuración general de la clínica ni la agenda de otros profesionales. |
+
+Para dar de alta el acceso de un profesional a la agenda, desde **Configuración → Usuarios del panel** (Dueño/a) creás su usuario con rol Staff y lo **vinculás al profesional correspondiente**: a partir de ahí esa persona entra con su propio email y contraseña, y el sistema le muestra únicamente lo suyo. Todos los permisos se validan también del lado del servidor (no sólo ocultando botones), así que aunque alguien intente forzar una acción fuera de su rol, el sistema la rechaza.
 
 ## Cómo adaptarla a tu clínica
 

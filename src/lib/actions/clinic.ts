@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/actions/guard";
 
 export async function updateClinicSettings(payload: {
   name: string;
@@ -22,6 +23,8 @@ export async function updateClinicSettings(payload: {
   currency: string;
   welcomeMessage?: string;
 }) {
+  await requireRole("ADMIN");
+
   if (!payload.name.trim()) return { error: "El nombre de la clínica es obligatorio." };
 
   const existing = await prisma.clinic.findFirst();
@@ -61,9 +64,20 @@ export async function upsertAdminUser(payload: {
   password?: string;
   role: "OWNER" | "ADMIN" | "STAFF";
   active: boolean;
+  professionalId?: string | null;
 }) {
+  await requireRole("OWNER");
+
   if (!payload.name.trim() || !payload.email.trim()) {
     return { error: "Nombre y email son obligatorios." };
+  }
+
+  const professionalId = payload.professionalId?.trim() || null;
+  if (professionalId) {
+    const takenBy = await prisma.adminUser.findUnique({ where: { professionalId } });
+    if (takenBy && takenBy.id !== payload.id) {
+      return { error: "Ese profesional ya tiene un usuario vinculado." };
+    }
   }
 
   if (payload.id) {
@@ -72,6 +86,7 @@ export async function upsertAdminUser(payload: {
       email: payload.email.trim().toLowerCase(),
       role: payload.role,
       active: payload.active,
+      professionalId,
     };
     if (payload.password?.trim()) {
       data.passwordHash = await bcrypt.hash(payload.password.trim(), 10);
@@ -90,6 +105,7 @@ export async function upsertAdminUser(payload: {
         passwordHash: await bcrypt.hash(payload.password.trim(), 10),
         role: payload.role,
         active: payload.active,
+        professionalId,
       },
     });
   }
@@ -99,6 +115,7 @@ export async function upsertAdminUser(payload: {
 }
 
 export async function deleteAdminUser(id: string) {
+  await requireRole("OWNER");
   const count = await prisma.adminUser.count();
   if (count <= 1) return { error: "Debe existir al menos un usuario administrador." };
   await prisma.adminUser.delete({ where: { id } });

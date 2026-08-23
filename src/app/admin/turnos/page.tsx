@@ -1,16 +1,24 @@
 import { prisma } from "@/lib/prisma";
+import { getCurrentAdmin } from "@/lib/actions/guard";
 import { TurnosClient } from "./turnos-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function TurnosPage() {
+  const currentUser = await getCurrentAdmin();
+  const scopeToOwn = currentUser?.role === "STAFF" ? currentUser.professionalId : null;
+
   const [appointments, professionals, services, patients] = await Promise.all([
     prisma.appointment.findMany({
+      where: scopeToOwn ? { professionalId: scopeToOwn } : undefined,
       include: { patient: true, service: true, professional: true },
       orderBy: [{ date: "desc" }, { startTime: "desc" }],
       take: 500,
     }),
-    prisma.professional.findMany({ orderBy: { order: "asc" } }),
+    prisma.professional.findMany({
+      where: scopeToOwn ? { id: scopeToOwn } : undefined,
+      orderBy: { order: "asc" },
+    }),
     prisma.service.findMany({ orderBy: { order: "asc" } }),
     prisma.patient.findMany({ orderBy: { createdAt: "desc" } }),
   ]);

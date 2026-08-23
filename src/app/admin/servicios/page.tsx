@@ -1,9 +1,12 @@
 import { prisma } from "@/lib/prisma";
+import { requirePageRole } from "@/lib/actions/guard";
 import { ServiciosClient } from "./servicios-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function ServiciosPage() {
+  await requirePageRole("ADMIN");
+
   const [services, professionals] = await Promise.all([
     prisma.service.findMany({
       include: { professionals: true, _count: { select: { appointments: true } } },

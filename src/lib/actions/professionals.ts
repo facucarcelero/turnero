@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/actions/guard";
 
 export async function upsertProfessional(payload: {
   id?: string;
@@ -11,6 +12,7 @@ export async function upsertProfessional(payload: {
   color: string;
   active: boolean;
 }) {
+  await requireRole("ADMIN");
   if (!payload.name.trim()) return { error: "El nombre es obligatorio." };
 
   const data = {
@@ -34,6 +36,7 @@ export async function upsertProfessional(payload: {
 }
 
 export async function deleteProfessional(id: string) {
+  await requireRole("ADMIN");
   const count = await prisma.appointment.count({ where: { professionalId: id } });
   if (count > 0) {
     return { error: `No se puede eliminar: tiene ${count} turno(s) asociado(s). Podés desactivarlo.` };
@@ -45,6 +48,7 @@ export async function deleteProfessional(id: string) {
 }
 
 export async function toggleProfessionalActive(id: string, active: boolean) {
+  await requireRole("ADMIN");
   try {
     await prisma.professional.update({ where: { id }, data: { active } });
   } catch {

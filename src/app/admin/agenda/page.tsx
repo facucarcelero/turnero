@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getCurrentAdmin } from "@/lib/actions/guard";
 import { AgendaClient } from "./agenda-client";
 import { addDaysStr, todayStr } from "@/lib/time";
 
@@ -7,19 +8,27 @@ export const dynamic = "force-dynamic";
 export default async function AgendaPage() {
   const from = addDaysStr(todayStr(), -30);
   const to = addDaysStr(todayStr(), 120);
+  const currentUser = await getCurrentAdmin();
+  // Un profesional con usuario autogestionado sólo ve su propia agenda.
+  const scopeToOwn = currentUser?.role === "STAFF" ? currentUser.professionalId : null;
 
   const [professionals, appointments, blockedSlots, services, patients] = await Promise.all([
     prisma.professional.findMany({
-      where: { active: true },
+      where: { active: true, ...(scopeToOwn ? { id: scopeToOwn } : {}) },
       include: { workingHours: true },
       orderBy: { order: "asc" },
     }),
     prisma.appointment.findMany({
-      where: { date: { gte: from, lte: to } },
+      where: { date: { gte: from, lte: to }, ...(scopeToOwn ? { professionalId: scopeToOwn } : {}) },
       include: { patient: true, service: true },
       orderBy: { startTime: "asc" },
     }),
-    prisma.blockedSlot.findMany({ where: { date: { gte: from, lte: to } } }),
+    prisma.blockedSlot.findMany({
+      where: {
+        date: { gte: from, lte: to },
+        ...(scopeToOwn ? { OR: [{ professionalId: scopeToOwn }, { professionalId: null }] } : {}),
+      },
+    }),
     prisma.service.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
     prisma.patient.findMany({ orderBy: { createdAt: "desc" } }),
   ]);

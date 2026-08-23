@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, LogOut, ChevronRight } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
-import { NAV_ITEMS, MOBILE_PRIMARY, MOBILE_MORE } from "./nav-items";
+import { splitMobileNav, type NavItem } from "./nav-items";
 import { signOutAction } from "@/lib/actions/session";
 
 function isActive(pathname: string, href: string) {
@@ -17,15 +17,18 @@ export function AdminShell({
   clinicName,
   userName,
   userRole,
+  navItems,
   children,
 }: {
   clinicName: string;
   userName: string;
   userRole: string;
+  navItems: NavItem[];
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  const { primary: MOBILE_PRIMARY, more: MOBILE_MORE } = splitMobileNav(navItems);
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -41,7 +44,7 @@ export function AdminShell({
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active = isActive(pathname, item.href);
             return (
               <Link
@@ -104,7 +107,10 @@ export function AdminShell({
 
         {/* Bottom nav mobile */}
         <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-200 pb-[env(safe-area-inset-bottom)]">
-          <div className="grid grid-cols-5 h-16">
+          <div
+            className="grid h-16"
+            style={{ gridTemplateColumns: `repeat(${MOBILE_PRIMARY.length + (MOBILE_MORE.length > 0 ? 1 : 0)}, minmax(0, 1fr))` }}
+          >
             {MOBILE_PRIMARY.map((item) => {
               const active = isActive(pathname, item.href);
               return (
@@ -121,18 +127,20 @@ export function AdminShell({
                 </Link>
               );
             })}
-            <button
-              onClick={() => setMoreOpen(true)}
-              className={cn(
-                "flex flex-col items-center justify-center gap-1 text-[11px] font-medium cursor-pointer",
-                moreOpen || MOBILE_MORE.some((i) => isActive(pathname, i.href))
-                  ? "text-[var(--brand)]"
-                  : "text-slate-500"
-              )}
-            >
-              <Menu className="size-5" />
-              Más
-            </button>
+            {MOBILE_MORE.length > 0 && (
+              <button
+                onClick={() => setMoreOpen(true)}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-1 text-[11px] font-medium cursor-pointer",
+                  moreOpen || MOBILE_MORE.some((i) => isActive(pathname, i.href))
+                    ? "text-[var(--brand)]"
+                    : "text-slate-500"
+                )}
+              >
+                <Menu className="size-5" />
+                Más
+              </button>
+            )}
           </div>
         </nav>
 

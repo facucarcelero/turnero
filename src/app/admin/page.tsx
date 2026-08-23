@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { getCurrentAdmin } from "@/lib/actions/guard";
 import { todayStr, addDaysStr, formatDateLong } from "@/lib/time";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
@@ -18,17 +19,20 @@ export const dynamic = "force-dynamic";
 export default async function AdminDashboardPage() {
   const today = todayStr();
   const weekEnd = addDaysStr(today, 7);
+  const currentUser = await getCurrentAdmin();
+  const scopeToOwn = currentUser?.role === "STAFF" ? currentUser.professionalId : null;
+  const scopeFilter = scopeToOwn ? { professionalId: scopeToOwn } : {};
 
   const [todayAppointments, weekCount, pendingCount, patientsCount, clinic] = await Promise.all([
     prisma.appointment.findMany({
-      where: { date: today, status: { not: "CANCELLED" } },
+      where: { date: today, status: { not: "CANCELLED" }, ...scopeFilter },
       include: { patient: true, service: true, professional: true },
       orderBy: { startTime: "asc" },
     }),
     prisma.appointment.count({
-      where: { date: { gte: today, lt: weekEnd }, status: { not: "CANCELLED" } },
+      where: { date: { gte: today, lt: weekEnd }, status: { not: "CANCELLED" }, ...scopeFilter },
     }),
-    prisma.appointment.count({ where: { status: "PENDING" } }),
+    prisma.appointment.count({ where: { status: "PENDING", ...scopeFilter } }),
     prisma.patient.count(),
     prisma.clinic.findFirst(),
   ]);
@@ -131,7 +135,7 @@ export default async function AdminDashboardPage() {
         </CardBody>
       </Card>
 
-      {!clinic?.logoUrl && (
+      {!clinic?.logoUrl && currentUser?.role !== "STAFF" && (
         <p className="text-xs text-slate-400 text-center">
           Personalizá el nombre, logo y colores de tu clínica en{" "}
           <Link href="/admin/configuracion" className="text-[var(--brand)] hover:underline">

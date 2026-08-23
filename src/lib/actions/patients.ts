@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/actions/guard";
 
 export async function upsertPatient(payload: {
   id?: string;
@@ -13,6 +14,7 @@ export async function upsertPatient(payload: {
   birthDate?: string;
   notes?: string;
 }) {
+  await requireRole("STAFF");
   if (!payload.firstName.trim() || !payload.lastName.trim() || !payload.phone.trim()) {
     return { error: "Nombre, apellido y teléfono son obligatorios." };
   }
@@ -38,6 +40,7 @@ export async function upsertPatient(payload: {
 }
 
 export async function deletePatient(id: string) {
+  await requireRole("STAFF");
   const count = await prisma.appointment.count({ where: { patientId: id } });
   if (count > 0) {
     return { error: `No se puede eliminar: tiene ${count} turno(s) asociado(s).` };
@@ -48,6 +51,7 @@ export async function deletePatient(id: string) {
 }
 
 export async function searchPatients(query: string) {
+  await requireRole("STAFF");
   if (!query.trim()) {
     return prisma.patient.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
   }

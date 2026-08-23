@@ -24,13 +24,21 @@ type BlockedSlot = {
 export function BloqueosClient({
   blockedSlots,
   professionals,
+  restrictToProfessionalId,
 }: {
   blockedSlots: BlockedSlot[];
   professionals: { id: string; name: string }[];
+  restrictToProfessionalId?: string | null;
 }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [wholeDay, setWholeDay] = useState(true);
-  const [form, setForm] = useState({ professionalId: "", date: todayStr(), startTime: "09:00", endTime: "13:00", reason: "" });
+  const [form, setForm] = useState({
+    professionalId: restrictToProfessionalId ?? "",
+    date: todayStr(),
+    startTime: "09:00",
+    endTime: "13:00",
+    reason: "",
+  });
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -50,7 +58,7 @@ export function BloqueosClient({
       }
       toast.success("Bloqueo creado");
       setModalOpen(false);
-      setForm({ professionalId: "", date: todayStr(), startTime: "09:00", endTime: "13:00", reason: "" });
+      setForm({ professionalId: restrictToProfessionalId ?? "", date: todayStr(), startTime: "09:00", endTime: "13:00", reason: "" });
     });
   }
 
@@ -84,7 +92,9 @@ export function BloqueosClient({
                     {b.reason && ` · ${b.reason}`}
                   </p>
                 </div>
-                <ConfirmButton action={() => deleteBlockedSlot(b.id)} successText="Bloqueo eliminado" />
+                {(!restrictToProfessionalId || b.professionalId === restrictToProfessionalId) && (
+                  <ConfirmButton action={() => deleteBlockedSlot(b.id)} successText="Bloqueo eliminado" />
+                )}
               </CardBody>
             </Card>
           ))}
@@ -93,15 +103,24 @@ export function BloqueosClient({
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nuevo bloqueo" description="Bloqueá un día completo o un rango horario puntual.">
         <div className="space-y-4">
-          <div>
-            <Label>Profesional</Label>
-            <Select value={form.professionalId} onChange={(e) => setForm((f) => ({ ...f, professionalId: e.target.value }))}>
-              <option value="">Toda la clínica</option>
-              {professionals.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </Select>
-          </div>
+          {restrictToProfessionalId ? (
+            <div>
+              <Label>Profesional</Label>
+              <p className="text-sm text-slate-600">
+                {professionals.find((p) => p.id === restrictToProfessionalId)?.name} (tu propia agenda)
+              </p>
+            </div>
+          ) : (
+            <div>
+              <Label>Profesional</Label>
+              <Select value={form.professionalId} onChange={(e) => setForm((f) => ({ ...f, professionalId: e.target.value }))}>
+                <option value="">Toda la clínica</option>
+                {professionals.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </Select>
+            </div>
+          )}
           <div>
             <Label>Fecha</Label>
             <Input type="date" min={todayStr()} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />

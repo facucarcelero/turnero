@@ -65,13 +65,18 @@ model Clinic {
 // ============================================================
 
 model AdminUser {
-  id           String    @id @default(cuid())
-  name         String
-  email        String    @unique
-  passwordHash String
-  role         AdminRole @default(STAFF)
-  active       Boolean   @default(true)
-  createdAt    DateTime  @default(now())
+  id             String        @id @default(cuid())
+  name           String
+  email          String        @unique
+  passwordHash   String
+  role           AdminRole     @default(STAFF)
+  active         Boolean       @default(true)
+  // Vínculo opcional 1 a 1: cuando un usuario del panel es a la vez un
+  // profesional, este campo le da acceso de "autogestión" (ver Mi perfil)
+  // restringido a su propia agenda, horarios y datos de perfil.
+  professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  professionalId String?       @unique
+  createdAt      DateTime      @default(now())
 }
 
 // ============================================================
@@ -91,6 +96,7 @@ model Professional {
   workingHours  WorkingHour[]
   blockedSlots  BlockedSlot[]
   appointments  Appointment[]
+  adminUser     AdminUser?
   createdAt     DateTime       @default(now())
 }
 

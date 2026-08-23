@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { getNavItems } from "@/components/admin/nav-items";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -11,11 +12,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     return <>{children}</>;
   }
 
+  const role = (session.user as { role?: string }).role ?? "STAFF";
+  const professionalId = (session.user as { professionalId?: string | null }).professionalId ?? null;
+
   return (
     <AdminShell
       clinicName={clinic?.name ?? "Turnero"}
       userName={session.user.name ?? "Admin"}
-      userRole={(session.user as { role?: string }).role ?? "STAFF"}
+      userRole={role}
+      navItems={getNavItems(role, !!professionalId)}
     >
       {children}
     </AdminShell>

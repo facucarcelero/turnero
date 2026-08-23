@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAvailableSlots } from "@/lib/availability";
+import { getCurrentAdmin } from "@/lib/actions/guard";
 import type { AppointmentStatus } from "@prisma/client";
 
 export type BookingPayload = {
@@ -143,6 +144,16 @@ export async function findAppointmentsByContact(phone: string, dni?: string) {
 // ---------------------------------------------------------------------------
 
 export async function updateAppointmentStatus(id: string, status: AppointmentStatus, reason?: string) {
+  const user = await getCurrentAdmin();
+  if (!user) return { error: "No tenés permisos para realizar esta acción." };
+
+  if (user.role === "STAFF" && user.professionalId) {
+    const appointment = await prisma.appointment.findUnique({ where: { id } });
+    if (!appointment || appointment.professionalId !== user.professionalId) {
+      return { error: "Sólo podés gestionar turnos de tu propia agenda." };
+    }
+  }
+
   try {
     await prisma.appointment.update({
       where: { id },
@@ -158,6 +169,16 @@ export async function updateAppointmentStatus(id: string, status: AppointmentSta
 }
 
 export async function deleteAppointment(id: string) {
+  const user = await getCurrentAdmin();
+  if (!user) return { error: "No tenés permisos para realizar esta acción." };
+
+  if (user.role === "STAFF" && user.professionalId) {
+    const appointment = await prisma.appointment.findUnique({ where: { id } });
+    if (!appointment || appointment.professionalId !== user.professionalId) {
+      return { error: "Sólo podés eliminar turnos de tu propia agenda." };
+    }
+  }
+
   await prisma.appointment.delete({ where: { id } });
   revalidatePath("/admin");
   revalidatePath("/admin/agenda");
@@ -179,6 +200,18 @@ export type AdminAppointmentPayload = {
 
 export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
   const { id, patientId, newPatient, professionalId, serviceId, date, startTime, notes, status } = payload;
+
+  const user = await getCurrentAdmin();
+  if (!user) return { error: "No tenés permisos para realizar esta acción." };
+  if (user.role === "STAFF" && user.professionalId && professionalId !== user.professionalId) {
+    return { error: "Sólo podés cargar turnos en tu propia agenda." };
+  }
+  if (id && user.role === "STAFF" && user.professionalId) {
+    const existing = await prisma.appointment.findUnique({ where: { id } });
+    if (!existing || existing.professionalId !== user.professionalId) {
+      return { error: "Sólo podés editar turnos de tu propia agenda." };
+    }
+  }
 
   if (!professionalId || !serviceId || !date || !startTime) {
     return { error: "Completá todos los campos obligatorios." };

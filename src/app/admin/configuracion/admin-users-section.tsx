@@ -18,33 +18,41 @@ type AdminUserRow = {
   email: string;
   role: "OWNER" | "ADMIN" | "STAFF";
   active: boolean;
+  professionalId: string | null;
 };
+
+type ProfessionalOption = { id: string; name: string };
 
 const ROLE_LABEL: Record<string, string> = { OWNER: "Dueño/a", ADMIN: "Administrador", STAFF: "Staff" };
 
-export function AdminUsersSection({ users }: { users: AdminUserRow[] }) {
+export function AdminUsersSection({ users, professionals }: { users: AdminUserRow[]; professionals: ProfessionalOption[] }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUserRow | undefined>(undefined);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "STAFF" as const, active: true });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "STAFF" as const, active: true, professionalId: "" });
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const linkedIds = new Set(users.filter((u) => u.professionalId).map((u) => u.professionalId));
+  const availableProfessionals = professionals.filter(
+    (p) => !linkedIds.has(p.id) || p.id === editing?.professionalId
+  );
+
   function openNew() {
     setEditing(undefined);
-    setForm({ name: "", email: "", password: "", role: "STAFF", active: true });
+    setForm({ name: "", email: "", password: "", role: "STAFF", active: true, professionalId: "" });
     setModalOpen(true);
   }
 
   function openEdit(u: AdminUserRow) {
     setEditing(u);
-    setForm({ name: u.name, email: u.email, password: "", role: u.role as "STAFF", active: u.active });
+    setForm({ name: u.name, email: u.email, password: "", role: u.role as "STAFF", active: u.active, professionalId: u.professionalId ?? "" });
     setModalOpen(true);
   }
 
   function submit() {
     setError(null);
     startTransition(async () => {
-      const res = await upsertAdminUser({ id: editing?.id, ...form });
+      const res = await upsertAdminUser({ id: editing?.id, ...form, professionalId: form.professionalId || null });
       if (res.error) {
         setError(res.error);
         return;
@@ -72,6 +80,11 @@ export function AdminUsersSection({ users }: { users: AdminUserRow[] }) {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-slate-900 truncate">{u.name}</p>
                 <p className="text-xs text-slate-500 truncate">{u.email}</p>
+                {u.professionalId && (
+                  <p className="text-xs text-[var(--brand)] truncate mt-0.5">
+                    {professionals.find((p) => p.id === u.professionalId)?.name ?? "Profesional vinculado"}
+                  </p>
+                )}
               </div>
               <Badge color={u.role === "OWNER" ? "teal" : "slate"}>{ROLE_LABEL[u.role]}</Badge>
               <button onClick={() => openEdit(u)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer" title="Editar">
@@ -104,6 +117,21 @@ export function AdminUsersSection({ users }: { users: AdminUserRow[] }) {
               <option value="ADMIN">Administrador</option>
               <option value="OWNER">Dueño/a (control total)</option>
             </Select>
+          </div>
+          <div>
+            <Label>Vincular a un profesional (opcional)</Label>
+            <Select
+              value={form.professionalId}
+              onChange={(e) => setForm((f) => ({ ...f, professionalId: e.target.value }))}
+            >
+              <option value="">Sin vincular</option>
+              {availableProfessionals.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </Select>
+            <p className="text-xs text-slate-400 mt-1.5">
+              Si lo vinculás, esa persona podrá entrar con su propio usuario a editar su perfil, su horario y ver únicamente su propia agenda.
+            </p>
           </div>
           <label className="flex items-center gap-2.5 text-sm text-slate-700 cursor-pointer">
             <input

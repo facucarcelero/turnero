@@ -142,6 +142,14 @@ export function BookingWizard({
     if (res.success && res.appointmentId) {
       setResult({ appointmentId: res.appointmentId, cancelToken: res.cancelToken! });
       setStep(4);
+      try {
+        localStorage.setItem(
+          "turnero:mis-turnos-contacto",
+          JSON.stringify({ phone: form.phone.trim(), dni: form.dni.trim() })
+        );
+      } catch {
+        // Ignorado: sólo evita que el paciente tenga que volver a tipear sus datos en "Mis turnos".
+      }
     }
   }
 

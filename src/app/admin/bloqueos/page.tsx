@@ -1,17 +1,27 @@
 import { prisma } from "@/lib/prisma";
+import { getCurrentAdmin } from "@/lib/actions/guard";
 import { BloqueosClient } from "./bloqueos-client";
 import { todayStr } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
 export default async function BloqueosPage() {
+  const currentUser = await getCurrentAdmin();
+  const scopeToOwn = currentUser?.role === "STAFF" ? currentUser.professionalId : null;
+
   const [blockedSlots, professionals] = await Promise.all([
     prisma.blockedSlot.findMany({
-      where: { date: { gte: todayStr() } },
+      where: {
+        date: { gte: todayStr() },
+        ...(scopeToOwn ? { OR: [{ professionalId: scopeToOwn }, { professionalId: null }] } : {}),
+      },
       include: { professional: true },
       orderBy: { date: "asc" },
     }),
-    prisma.professional.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+    prisma.professional.findMany({
+      where: { active: true, ...(scopeToOwn ? { id: scopeToOwn } : {}) },
+      orderBy: { order: "asc" },
+    }),
   ]);
 
   return (
@@ -26,6 +36,7 @@ export default async function BloqueosPage() {
         professionalName: b.professional?.name ?? null,
       }))}
       professionals={professionals.map((p) => ({ id: p.id, name: p.name }))}
+      restrictToProfessionalId={scopeToOwn}
     />
   );
 }

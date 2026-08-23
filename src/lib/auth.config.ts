@@ -19,13 +19,17 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     jwt({ token, user }) {
       if (user) {
-        token.role = (user as { role: string }).role;
+        const u = user as { role: string; professionalId: string | null };
+        token.role = u.role;
+        token.professionalId = u.professionalId;
       }
       return token;
     },
     session({ session, token }) {
       if (session.user) {
         (session.user as { role?: string }).role = token.role as string | undefined;
+        (session.user as { professionalId?: string | null }).professionalId =
+          (token.professionalId as string | null | undefined) ?? null;
         (session.user as { id?: string }).id = token.sub;
       }
       return session;

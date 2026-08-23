@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/actions/guard";
 
 export async function upsertService(payload: {
   id?: string;
@@ -13,6 +14,7 @@ export async function upsertService(payload: {
   active: boolean;
   professionalIds: string[];
 }) {
+  await requireRole("ADMIN");
   if (!payload.name.trim()) return { error: "El nombre es obligatorio." };
   if (!payload.durationMin || payload.durationMin < 5) {
     return { error: "La duración mínima es de 5 minutos." };
@@ -48,6 +50,7 @@ export async function upsertService(payload: {
 }
 
 export async function deleteService(id: string) {
+  await requireRole("ADMIN");
   const count = await prisma.appointment.count({ where: { serviceId: id } });
   if (count > 0) {
     return { error: `No se puede eliminar: tiene ${count} turno(s) asociado(s). Podés desactivarlo.` };
@@ -59,6 +62,7 @@ export async function deleteService(id: string) {
 }
 
 export async function toggleServiceActive(id: string, active: boolean) {
+  await requireRole("ADMIN");
   try {
     await prisma.service.update({ where: { id }, data: { active } });
   } catch {

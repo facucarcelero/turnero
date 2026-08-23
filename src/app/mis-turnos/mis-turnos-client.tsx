@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Search, CalendarX2, Loader2 } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { Search, CalendarX2, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Input, Label } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { formatDateMedium, minutesFromNow } from "@/lib/time";
 import { findAppointmentsByContact, cancelAppointmentByToken } from "@/lib/actions/appointments";
 
 type AppointmentResult = Awaited<ReturnType<typeof findAppointmentsByContact>>[number];
+
+const STORAGE_KEY = "turnero:mis-turnos-contacto";
 
 export function MisTurnosClient({
   allowCancelation,
@@ -23,6 +25,31 @@ export function MisTurnosClient({
   const [results, setResults] = useState<AppointmentResult[] | null>(null);
   const [searching, startSearch] = useTransition();
   const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [remembered, setRemembered] = useState(false);
+
+  // Recordamos el último teléfono/DNI usado en este dispositivo para que
+  // el paciente no tenga que volver a tipearlo cada vez que visita la página.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return;
+      const { phone: savedPhone, dni: savedDni } = JSON.parse(saved) as { phone: string; dni: string };
+      if (savedPhone) {
+        // Precarga desde localStorage: patrón habitual para hidratar estado
+        // desde una fuente externa al montar (ver booking-wizard.tsx).
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPhone(savedPhone);
+        setDni(savedDni ?? "");
+        setRemembered(true);
+        startSearch(async () => {
+          const data = await findAppointmentsByContact(savedPhone, savedDni);
+          setResults(data);
+        });
+      }
+    } catch {
+      // localStorage puede no estar disponible (modo privado); no es crítico.
+    }
+  }, []);
 
   function search() {
     if (!phone.trim()) {
@@ -33,7 +60,25 @@ export function MisTurnosClient({
       const data = await findAppointmentsByContact(phone, dni);
       setResults(data);
       if (data.length === 0) toast.info("No encontramos turnos con esos datos.");
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ phone: phone.trim(), dni: dni.trim() }));
+        setRemembered(true);
+      } catch {
+        // Ignorado: sólo afecta la conveniencia de no volver a tipear los datos.
+      }
     });
+  }
+
+  function forget() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // no-op
+    }
+    setRemembered(false);
+    setPhone("");
+    setDni("");
+    setResults(null);
   }
 
   function cancel(token: string) {
@@ -51,10 +96,21 @@ export function MisTurnosClient({
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-slate-900 mb-1">Mis turnos</h1>
-      <p className="text-sm text-slate-500 mb-5">
-        Buscá tus turnos con el teléfono que usaste al reservar.
-      </p>
+      <div className="flex items-start justify-between gap-3 mb-5">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900 mb-1">Mis turnos</h1>
+          <p className="text-sm text-slate-500">Buscá tus turnos con el teléfono que usaste al reservar.</p>
+        </div>
+        {remembered && (
+          <button
+            onClick={forget}
+            className="shrink-0 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 cursor-pointer mt-1"
+            title="Olvidar mis datos en este dispositivo"
+          >
+            <X className="size-3.5" /> Olvidar
+          </button>
+        )}
+      </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="grid sm:grid-cols-2 gap-3">
