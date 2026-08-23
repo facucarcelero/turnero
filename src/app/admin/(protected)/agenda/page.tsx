@@ -12,7 +12,7 @@ export default async function AgendaPage() {
   // Un profesional con usuario autogestionado sólo ve su propia agenda.
   const scopeToOwn = currentUser?.role === "STAFF" ? currentUser.professionalId : null;
 
-  const [professionals, appointments, blockedSlots, services, patients] = await Promise.all([
+  const [professionals, appointments, blockedSlots, services, patients, insuranceProviders] = await Promise.all([
     prisma.professional.findMany({
       where: { active: true, ...(scopeToOwn ? { id: scopeToOwn } : {}) },
       include: { workingHours: true },
@@ -20,7 +20,7 @@ export default async function AgendaPage() {
     }),
     prisma.appointment.findMany({
       where: { date: { gte: from, lte: to }, ...(scopeToOwn ? { professionalId: scopeToOwn } : {}) },
-      include: { patient: true, service: true },
+      include: { patient: true, service: true, insuranceProvider: true },
       orderBy: { startTime: "asc" },
     }),
     prisma.blockedSlot.findMany({
@@ -31,6 +31,7 @@ export default async function AgendaPage() {
     }),
     prisma.service.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
     prisma.patient.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.insuranceProvider.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
   ]);
 
   return (
@@ -54,6 +55,10 @@ export default async function AgendaPage() {
         patientPhone: a.patient.phone,
         serviceId: a.serviceId,
         serviceName: a.service.name,
+        insuranceProviderId: a.insuranceProviderId,
+        insuranceProviderName: a.insuranceProvider?.name ?? null,
+        insuranceMemberNumber: a.insuranceMemberNumber,
+        copaymentAmount: a.copaymentAmount,
       }))}
       blockedSlots={blockedSlots.map((b) => ({
         date: b.date,
@@ -64,6 +69,7 @@ export default async function AgendaPage() {
       }))}
       services={services.map((s) => ({ id: s.id, name: s.name, durationMin: s.durationMin }))}
       patients={patients.map((p) => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, phone: p.phone, dni: p.dni }))}
+      insuranceProviders={insuranceProviders.map((p) => ({ id: p.id, name: p.name }))}
     />
   );
 }

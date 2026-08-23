@@ -11,6 +11,8 @@ export async function upsertProfessional(payload: {
   bio?: string;
   color: string;
   active: boolean;
+  asksInsurance: boolean;
+  insuranceProviderIds: string[];
 }) {
   await requireRole("ADMIN");
   if (!payload.name.trim()) return { error: "El nombre es obligatorio." };
@@ -21,13 +23,23 @@ export async function upsertProfessional(payload: {
     bio: payload.bio?.trim() || null,
     color: payload.color || "#0d9488",
     active: payload.active,
+    asksInsurance: payload.asksInsurance,
   };
 
   if (payload.id) {
-    await prisma.professional.update({ where: { id: payload.id }, data });
+    await prisma.professional.update({
+      where: { id: payload.id },
+      data: { ...data, insuranceProviders: { set: payload.insuranceProviderIds.map((id) => ({ id })) } },
+    });
   } else {
     const count = await prisma.professional.count();
-    await prisma.professional.create({ data: { ...data, order: count } });
+    await prisma.professional.create({
+      data: {
+        ...data,
+        order: count,
+        insuranceProviders: { connect: payload.insuranceProviderIds.map((id) => ({ id })) },
+      },
+    });
   }
 
   revalidatePath("/admin/profesionales");

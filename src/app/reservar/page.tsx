@@ -18,7 +18,11 @@ export default async function ReservarPage({
       include: { professionals: { where: { active: true }, select: { id: true } } },
       orderBy: { order: "asc" },
     }),
-    prisma.professional.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+    prisma.professional.findMany({
+      where: { active: true },
+      include: { insuranceProviders: { where: { active: true } } },
+      orderBy: { order: "asc" },
+    }),
   ]);
 
   const servicesDTO = services.map((s) => ({
@@ -36,6 +40,8 @@ export default async function ReservarPage({
     name: p.name,
     specialty: p.specialty,
     color: p.color,
+    asksInsurance: p.asksInsurance,
+    insuranceProviders: p.insuranceProviders.map((ip) => ({ id: ip.id, name: ip.name })),
   }));
 
   return (

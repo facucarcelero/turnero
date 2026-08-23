@@ -7,10 +7,13 @@ export const dynamic = "force-dynamic";
 export default async function ProfesionalesPage() {
   await requirePageRole("ADMIN");
 
-  const professionals = await prisma.professional.findMany({
-    include: { _count: { select: { appointments: true } } },
-    orderBy: { order: "asc" },
-  });
+  const [professionals, insuranceProviders] = await Promise.all([
+    prisma.professional.findMany({
+      include: { _count: { select: { appointments: true } }, insuranceProviders: true },
+      orderBy: { order: "asc" },
+    }),
+    prisma.insuranceProvider.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+  ]);
 
   return (
     <ProfesionalesClient
@@ -21,8 +24,11 @@ export default async function ProfesionalesPage() {
         bio: p.bio,
         color: p.color,
         active: p.active,
+        asksInsurance: p.asksInsurance,
+        insuranceProviderIds: p.insuranceProviders.map((ip) => ip.id),
         appointmentsCount: p._count.appointments,
       }))}
+      insuranceProviders={insuranceProviders.map((p) => ({ id: p.id, name: p.name }))}
     />
   );
 }

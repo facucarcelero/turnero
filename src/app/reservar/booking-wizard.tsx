@@ -13,7 +13,7 @@ import {
 import { formatCurrency, cn } from "@/lib/utils";
 import { formatDateMedium, todayStr } from "@/lib/time";
 import { DayPicker } from "@/components/public/day-picker";
-import { Input, Label, Textarea, FieldError } from "@/components/ui/field";
+import { Input, Label, Select, Textarea, FieldError } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { createPublicAppointment } from "@/lib/actions/appointments";
 
@@ -27,7 +27,14 @@ type ServiceDTO = {
   professionalIds: string[];
 };
 
-type ProfessionalDTO = { id: string; name: string; specialty: string | null; color: string };
+type ProfessionalDTO = {
+  id: string;
+  name: string;
+  specialty: string | null;
+  color: string;
+  asksInsurance: boolean;
+  insuranceProviders: { id: string; name: string }[];
+};
 
 type ClinicInfo = {
   currency: string;
@@ -70,6 +77,8 @@ export function BookingWizard({
     email: "",
     dni: "",
     notes: "",
+    insuranceProviderId: "",
+    insuranceMemberNumber: "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +137,7 @@ export function BookingWizard({
       date,
       startTime: time,
       ...form,
+      insuranceProviderId: form.insuranceProviderId || null,
     });
     setSubmitting(false);
     if (res.error) {
@@ -342,6 +352,33 @@ export function BookingWizard({
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
               />
             </div>
+            {professional.asksInsurance && professional.insuranceProviders.length > 0 && (
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <div>
+                  <Label htmlFor="insuranceProviderId">Obra social / prepaga</Label>
+                  <Select
+                    id="insuranceProviderId"
+                    value={form.insuranceProviderId}
+                    onChange={(e) => setForm((f) => ({ ...f, insuranceProviderId: e.target.value }))}
+                  >
+                    <option value="">Particular / sin cobertura</option>
+                    {professional.insuranceProviders.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </Select>
+                </div>
+                {form.insuranceProviderId && (
+                  <div>
+                    <Label htmlFor="insuranceMemberNumber">N° de afiliado</Label>
+                    <Input
+                      id="insuranceMemberNumber"
+                      value={form.insuranceMemberNumber}
+                      onChange={(e) => setForm((f) => ({ ...f, insuranceMemberNumber: e.target.value }))}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3 mt-4">
               <div>
                 <Label htmlFor="dni">DNI (opcional)</Label>

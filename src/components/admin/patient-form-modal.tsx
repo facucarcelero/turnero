@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Save } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Input, Label, Textarea, FieldError } from "@/components/ui/field";
+import { Input, Label, Select, Textarea, FieldError } from "@/components/ui/field";
 import { upsertPatient } from "@/lib/actions/patients";
 
 export type EditablePatient = {
@@ -17,16 +17,20 @@ export type EditablePatient = {
   dni: string | null;
   birthDate: string | null;
   notes: string | null;
+  insuranceProviderId: string | null;
+  insuranceMemberNumber: string | null;
 };
 
 export function PatientFormModal({
   open,
   onClose,
   initial,
+  insuranceProviders,
 }: {
   open: boolean;
   onClose: () => void;
   initial?: EditablePatient;
+  insuranceProviders: { id: string; name: string }[];
 }) {
   const [form, setForm] = useState({
     firstName: initial?.firstName ?? "",
@@ -36,6 +40,8 @@ export function PatientFormModal({
     dni: initial?.dni ?? "",
     birthDate: initial?.birthDate ?? "",
     notes: initial?.notes ?? "",
+    insuranceProviderId: initial?.insuranceProviderId ?? "",
+    insuranceMemberNumber: initial?.insuranceMemberNumber ?? "",
   });
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -43,7 +49,7 @@ export function PatientFormModal({
   function submit() {
     setError(null);
     startTransition(async () => {
-      const res = await upsertPatient({ id: initial?.id, ...form });
+      const res = await upsertPatient({ id: initial?.id, ...form, insuranceProviderId: form.insuranceProviderId || null });
       if (res.error) {
         setError(res.error);
         return;
@@ -84,6 +90,27 @@ export function PatientFormModal({
           <div>
             <Label>Fecha de nacimiento</Label>
             <Input type="date" value={form.birthDate} onChange={(e) => setForm((f) => ({ ...f, birthDate: e.target.value }))} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Obra social / prepaga</Label>
+            <Select
+              value={form.insuranceProviderId}
+              onChange={(e) => setForm((f) => ({ ...f, insuranceProviderId: e.target.value }))}
+            >
+              <option value="">Particular / sin cobertura</option>
+              {insuranceProviders.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label>N° de afiliado</Label>
+            <Input
+              value={form.insuranceMemberNumber}
+              onChange={(e) => setForm((f) => ({ ...f, insuranceMemberNumber: e.target.value }))}
+            />
           </div>
         </div>
         <div>

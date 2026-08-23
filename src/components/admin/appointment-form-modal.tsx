@@ -13,6 +13,7 @@ import type { AppointmentStatus } from "@prisma/client";
 type Patient = { id: string; firstName: string; lastName: string; phone: string; dni: string | null };
 type Professional = { id: string; name: string };
 type Service = { id: string; name: string; durationMin: number };
+type InsuranceProvider = { id: string; name: string };
 
 export type EditableAppointment = {
   id: string;
@@ -24,6 +25,9 @@ export type EditableAppointment = {
   startTime: string;
   notes: string | null;
   status: AppointmentStatus;
+  insuranceProviderId: string | null;
+  insuranceMemberNumber: string | null;
+  copaymentAmount: number | null;
 };
 
 const STATUS_OPTIONS: { value: AppointmentStatus; label: string }[] = [
@@ -40,6 +44,7 @@ export function AppointmentFormModal({
   patients,
   professionals,
   services,
+  insuranceProviders,
   initial,
   defaultDate,
   defaultProfessionalId,
@@ -49,6 +54,7 @@ export function AppointmentFormModal({
   patients: Patient[];
   professionals: Professional[];
   services: Service[];
+  insuranceProviders: InsuranceProvider[];
   initial?: EditableAppointment;
   defaultDate?: string;
   defaultProfessionalId?: string;
@@ -67,6 +73,9 @@ export function AppointmentFormModal({
   const [startTime, setStartTime] = useState(initial?.startTime ?? "09:00");
   const [status, setStatus] = useState<AppointmentStatus>(initial?.status ?? "CONFIRMED");
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [insuranceProviderId, setInsuranceProviderId] = useState(initial?.insuranceProviderId ?? "");
+  const [insuranceMemberNumber, setInsuranceMemberNumber] = useState(initial?.insuranceMemberNumber ?? "");
+  const [copaymentAmount, setCopaymentAmount] = useState(initial?.copaymentAmount?.toString() ?? "");
 
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -110,6 +119,9 @@ export function AppointmentFormModal({
         startTime,
         notes,
         status,
+        insuranceProviderId: insuranceProviderId || null,
+        insuranceMemberNumber,
+        copaymentAmount: copaymentAmount.trim() ? Number(copaymentAmount) : null,
       });
       if (res.error) {
         setError(res.error);
@@ -253,6 +265,35 @@ export function AppointmentFormModal({
             ))}
           </Select>
         </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Obra social</Label>
+            <Select value={insuranceProviderId} onChange={(e) => setInsuranceProviderId(e.target.value)}>
+              <option value="">Particular</option>
+              {insuranceProviders.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label>N° de afiliado</Label>
+            <Input value={insuranceMemberNumber} onChange={(e) => setInsuranceMemberNumber(e.target.value)} />
+          </div>
+        </div>
+        {insuranceProviderId && (
+          <div>
+            <Label>Coseguro / copago ($, opcional)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Se completa cuando lo confirmás con la obra social"
+              value={copaymentAmount}
+              onChange={(e) => setCopaymentAmount(e.target.value)}
+            />
+          </div>
+        )}
 
         <div>
           <Label>Notas (opcional)</Label>

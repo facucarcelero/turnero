@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Phone, Mail, IdCard, Cake } from "lucide-react";
+import { ChevronLeft, Phone, Mail, IdCard, Cake, ShieldCheck } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/badge";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 import { formatDateShort } from "@/lib/time";
 import { initials, formatCurrency } from "@/lib/utils";
 
@@ -14,8 +14,9 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
   const patient = await prisma.patient.findUnique({
     where: { id },
     include: {
+      insuranceProvider: true,
       appointments: {
-        include: { service: true, professional: true },
+        include: { service: true, professional: true, insuranceProvider: true },
         orderBy: [{ date: "desc" }, { startTime: "desc" }],
       },
     },
@@ -45,6 +46,16 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
               {patient.dni && <span className="flex items-center gap-1.5"><IdCard className="size-3.5" /> {patient.dni}</span>}
               {patient.birthDate && <span className="flex items-center gap-1.5"><Cake className="size-3.5" /> {formatDateShort(patient.birthDate)}</span>}
             </div>
+            <div className="mt-2">
+              {patient.insuranceProvider ? (
+                <Badge color="blue">
+                  <ShieldCheck className="size-3" /> {patient.insuranceProvider.name}
+                  {patient.insuranceMemberNumber && ` · N° ${patient.insuranceMemberNumber}`}
+                </Badge>
+              ) : (
+                <Badge>Particular</Badge>
+              )}
+            </div>
           </div>
         </CardBody>
       </Card>
@@ -72,7 +83,10 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
                 <li key={a.id} className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900">{formatDateShort(a.date)} · {a.startTime}</p>
-                    <p className="text-xs text-slate-500 mt-0.5 truncate">{a.service.name} · {a.professional.name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 truncate">
+                      {a.service.name} · {a.professional.name}
+                      {a.insuranceProvider && ` · ${a.insuranceProvider.name}`}
+                    </p>
                   </div>
                   <StatusBadge status={a.status} />
                 </li>

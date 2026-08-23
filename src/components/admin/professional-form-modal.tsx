@@ -16,7 +16,11 @@ export type EditableProfessional = {
   bio: string | null;
   color: string;
   active: boolean;
+  asksInsurance: boolean;
+  insuranceProviderIds: string[];
 };
+
+type InsuranceProviderOption = { id: string; name: string };
 
 const COLORS = ["#0d9488", "#0891b2", "#7c3aed", "#db2777", "#2563eb", "#ea580c", "#16a34a", "#dc2626"];
 
@@ -24,10 +28,12 @@ export function ProfessionalFormModal({
   open,
   onClose,
   initial,
+  insuranceProviders,
 }: {
   open: boolean;
   onClose: () => void;
   initial?: EditableProfessional;
+  insuranceProviders: InsuranceProviderOption[];
 }) {
   const [form, setForm] = useState({
     name: initial?.name ?? "",
@@ -35,9 +41,20 @@ export function ProfessionalFormModal({
     bio: initial?.bio ?? "",
     color: initial?.color ?? COLORS[0],
     active: initial?.active ?? true,
+    asksInsurance: initial?.asksInsurance ?? false,
+    insuranceProviderIds: initial?.insuranceProviderIds ?? [],
   });
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  function toggleProvider(id: string) {
+    setForm((f) => ({
+      ...f,
+      insuranceProviderIds: f.insuranceProviderIds.includes(id)
+        ? f.insuranceProviderIds.filter((p) => p !== id)
+        : [...f.insuranceProviderIds, id],
+    }));
+  }
 
   function submit() {
     setError(null);
@@ -81,6 +98,50 @@ export function ProfessionalFormModal({
             ))}
           </div>
         </div>
+
+        <div className="rounded-xl border border-slate-200 p-3.5 space-y-3">
+          <label className="flex items-center gap-2.5 text-sm text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.asksInsurance}
+              onChange={(e) => setForm((f) => ({ ...f, asksInsurance: e.target.checked }))}
+              className="size-4 rounded border-slate-300 text-[var(--brand)] focus:ring-[var(--brand)]/30"
+            />
+            Pedir obra social/prepaga al reservar con este profesional
+          </label>
+          {form.asksInsurance && (
+            <div>
+              <Label className="mb-1">¿Cuáles atiende?</Label>
+              {insuranceProviders.length === 0 ? (
+                <p className="text-xs text-slate-400">
+                  Todavía no cargaste ninguna en Configuración → Obras sociales.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {insuranceProviders.map((p) => {
+                    const checked = form.insuranceProviderIds.includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => toggleProvider(p.id)}
+                        className={cn(
+                          "rounded-lg border px-3 py-1.5 text-xs font-medium",
+                          checked
+                            ? "bg-[var(--brand)] border-[var(--brand)] text-white"
+                            : "bg-white border-slate-200 text-slate-600"
+                        )}
+                      >
+                        {p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         <label className="flex items-center gap-2.5 text-sm text-slate-700 cursor-pointer">
           <input
             type="checkbox"

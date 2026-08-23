@@ -6,7 +6,7 @@ import { Plus, Search, Pencil, Check, X as XIcon, CalendarX2, PhoneCall } from "
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/field";
-import { StatusBadge } from "@/components/ui/badge";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { AppointmentFormModal, type EditableAppointment } from "@/components/admin/appointment-form-modal";
 import { formatDateShort, todayStr } from "@/lib/time";
@@ -29,6 +29,10 @@ type AppointmentRow = {
   serviceId: string;
   serviceName: string;
   servicePrice: number;
+  insuranceProviderId: string | null;
+  insuranceProviderName: string | null;
+  insuranceMemberNumber: string | null;
+  copaymentAmount: number | null;
 };
 
 const FILTER_OPTIONS: { value: string; label: string }[] = [
@@ -52,11 +56,13 @@ export function TurnosClient({
   professionals,
   services,
   patients,
+  insuranceProviders,
 }: {
   appointments: AppointmentRow[];
   professionals: { id: string; name: string }[];
   services: { id: string; name: string; durationMin: number }[];
   patients: { id: string; firstName: string; lastName: string; phone: string; dni: string | null }[];
+  insuranceProviders: { id: string; name: string }[];
 }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -99,6 +105,9 @@ export function TurnosClient({
       startTime: a.startTime,
       notes: a.notes,
       status: a.status,
+      insuranceProviderId: a.insuranceProviderId,
+      insuranceMemberNumber: a.insuranceMemberNumber,
+      copaymentAmount: a.copaymentAmount,
     });
     setModalOpen(true);
   }
@@ -186,6 +195,7 @@ export function TurnosClient({
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+                  {a.insuranceProviderName && <Badge color="blue">{a.insuranceProviderName}</Badge>}
                   <StatusBadge status={a.status} />
                   {a.status === "PENDING" && (
                     <button
@@ -246,6 +256,7 @@ export function TurnosClient({
         patients={patients}
         professionals={professionals}
         services={services}
+        insuranceProviders={insuranceProviders}
         initial={editing}
         defaultDate={today}
       />

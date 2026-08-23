@@ -84,20 +84,24 @@ model AdminUser {
 // ============================================================
 
 model Professional {
-  id            String         @id @default(cuid())
-  name          String
-  specialty     String?
-  bio           String?
-  photoUrl      String?
-  color         String         @default("#0d9488")
-  active        Boolean        @default(true)
-  order         Int            @default(0)
-  services      Service[]      @relation("ProfessionalServices")
-  workingHours  WorkingHour[]
-  blockedSlots  BlockedSlot[]
-  appointments  Appointment[]
-  adminUser     AdminUser?
-  createdAt     DateTime       @default(now())
+  id                 String              @id @default(cuid())
+  name               String
+  specialty          String?
+  bio                String?
+  photoUrl           String?
+  color              String              @default("#0d9488")
+  active             Boolean             @default(true)
+  order              Int                 @default(0)
+  services           Service[]           @relation("ProfessionalServices")
+  workingHours       WorkingHour[]
+  blockedSlots       BlockedSlot[]
+  appointments       Appointment[]
+  adminUser          AdminUser?
+  // Si pide obra social/prepaga al reservar: si es false, el paciente nunca
+  // ve ese paso y todo se trata como particular (comportamiento de siempre).
+  asksInsurance      Boolean             @default(false)
+  insuranceProviders InsuranceProvider[] @relation("ProfessionalInsuranceProviders")
+  createdAt          DateTime            @default(now())
 }
 
 // ============================================================
@@ -114,6 +118,21 @@ model Service {
   active        Boolean        @default(true)
   order         Int            @default(0)
   professionals Professional[] @relation("ProfessionalServices")
+  appointments  Appointment[]
+  createdAt     DateTime       @default(now())
+}
+
+// ============================================================
+// INSURANCE PROVIDERS (obras sociales / prepagas)
+// ============================================================
+
+model InsuranceProvider {
+  id            String         @id @default(cuid())
+  name          String
+  active        Boolean        @default(true)
+  order         Int            @default(0)
+  professionals Professional[] @relation("ProfessionalInsuranceProviders")
+  patients      Patient[]
   appointments  Appointment[]
   createdAt     DateTime       @default(now())
 }
@@ -156,16 +175,22 @@ model BlockedSlot {
 // ============================================================
 
 model Patient {
-  id           String        @id @default(cuid())
-  firstName    String
-  lastName     String
-  dni          String?
-  phone        String
-  email        String?
-  birthDate    String?
-  notes        String?
-  appointments Appointment[]
-  createdAt    DateTime      @default(now())
+  id                    String             @id @default(cuid())
+  firstName             String
+  lastName              String
+  dni                   String?
+  phone                 String
+  email                 String?
+  birthDate             String?
+  notes                 String?
+  // Cobertura de referencia del paciente (queda guardada de la última vez
+  // que la cargó); cada turno puede tener la suya propia igual, por si
+  // cambia entre visitas.
+  insuranceProvider     InsuranceProvider? @relation(fields: [insuranceProviderId], references: [id], onDelete: SetNull)
+  insuranceProviderId   String?
+  insuranceMemberNumber String?
+  appointments          Appointment[]
+  createdAt             DateTime           @default(now())
 
   @@index([phone])
   @@index([dni])
@@ -176,23 +201,30 @@ model Patient {
 // ============================================================
 
 model Appointment {
-  id             String            @id @default(cuid())
-  patient        Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  patientId      String
-  professional   Professional      @relation(fields: [professionalId], references: [id], onDelete: Cascade)
-  professionalId String
-  service        Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  serviceId      String
-  date           String // "2026-08-21"
-  startTime      String // "09:00"
-  endTime        String // "09:30"
-  status         AppointmentStatus @default(PENDING)
-  source         AppointmentSource @default(ONLINE)
-  notes          String?
-  cancelReason   String?
-  cancelToken    String            @unique @default(cuid())
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id                    String             @id @default(cuid())
+  patient               Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId             String
+  professional          Professional       @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  professionalId        String
+  service               Service            @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceId             String
+  date                  String // "2026-08-21"
+  startTime             String // "09:00"
+  endTime               String // "09:30"
+  status                AppointmentStatus  @default(PENDING)
+  source                AppointmentSource  @default(ONLINE)
+  notes                 String?
+  cancelReason          String?
+  cancelToken           String             @unique @default(cuid())
+  // Cobertura usada en ESTE turno puntual (puede diferir de la que el
+  // paciente tiene guardada) y el coseguro/copago, que normalmente el
+  // staff completa una vez que lo confirma con la obra social.
+  insuranceProvider     InsuranceProvider? @relation(fields: [insuranceProviderId], references: [id], onDelete: SetNull)
+  insuranceProviderId   String?
+  insuranceMemberNumber String?
+  copaymentAmount       Float?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
   @@index([date, professionalId])
   @@index([patientId])

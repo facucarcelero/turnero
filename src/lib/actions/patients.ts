@@ -13,6 +13,8 @@ export async function upsertPatient(payload: {
   dni?: string;
   birthDate?: string;
   notes?: string;
+  insuranceProviderId?: string | null;
+  insuranceMemberNumber?: string;
 }) {
   await requireRole("STAFF");
   if (!payload.firstName.trim() || !payload.lastName.trim() || !payload.phone.trim()) {
@@ -27,6 +29,8 @@ export async function upsertPatient(payload: {
     dni: payload.dni?.trim() || null,
     birthDate: payload.birthDate || null,
     notes: payload.notes?.trim() || null,
+    insuranceProviderId: payload.insuranceProviderId || null,
+    insuranceMemberNumber: payload.insuranceMemberNumber?.trim() || null,
   };
 
   if (payload.id) {

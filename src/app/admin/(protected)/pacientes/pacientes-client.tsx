@@ -6,14 +6,21 @@ import { Plus, Search, Pencil, Phone, ChevronRight } from "lucide-react";
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
+import { Badge } from "@/components/ui/badge";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { PatientFormModal, type EditablePatient } from "@/components/admin/patient-form-modal";
 import { initials } from "@/lib/utils";
 import { deletePatient } from "@/lib/actions/patients";
 
-type PatientRow = EditablePatient & { appointmentsCount: number };
+type PatientRow = EditablePatient & { appointmentsCount: number; insuranceProviderName: string | null };
 
-export function PacientesClient({ patients }: { patients: PatientRow[] }) {
+export function PacientesClient({
+  patients,
+  insuranceProviders,
+}: {
+  patients: PatientRow[];
+  insuranceProviders: { id: string; name: string }[];
+}) {
   const [query, setQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<EditablePatient | undefined>(undefined);
@@ -65,6 +72,7 @@ export function PacientesClient({ patients }: { patients: PatientRow[] }) {
                     </p>
                   </div>
                 </Link>
+                {p.insuranceProviderName && <Badge color="blue">{p.insuranceProviderName}</Badge>}
                 <span className="text-xs text-slate-400 hidden sm:inline shrink-0">{p.appointmentsCount} turno(s)</span>
                 <button onClick={() => { setEditing(p); setModalOpen(true); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer shrink-0" title="Editar">
                   <Pencil className="size-4" />
@@ -79,7 +87,13 @@ export function PacientesClient({ patients }: { patients: PatientRow[] }) {
         </div>
       )}
 
-      <PatientFormModal key={editing?.id ?? "new"} open={modalOpen} onClose={() => setModalOpen(false)} initial={editing} />
+      <PatientFormModal
+        key={editing?.id ?? "new"}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        initial={editing}
+        insuranceProviders={insuranceProviders}
+      />
     </div>
   );
 }

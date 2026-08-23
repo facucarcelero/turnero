@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Plus, Pencil, Check, X as XIcon, CalendarX2, CalendarOff, PhoneCall } from "lucide-react";
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/badge";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { DayPicker } from "@/components/public/day-picker";
 import { AppointmentFormModal, type EditableAppointment } from "@/components/admin/appointment-form-modal";
@@ -34,6 +34,10 @@ type AppointmentRow = {
   patientPhone: string;
   serviceId: string;
   serviceName: string;
+  insuranceProviderId: string | null;
+  insuranceProviderName: string | null;
+  insuranceMemberNumber: string | null;
+  copaymentAmount: number | null;
 };
 
 type BlockedSlot = {
@@ -50,12 +54,14 @@ export function AgendaClient({
   blockedSlots,
   services,
   patients,
+  insuranceProviders,
 }: {
   professionals: Professional[];
   appointments: AppointmentRow[];
   blockedSlots: BlockedSlot[];
   services: { id: string; name: string; durationMin: number }[];
   patients: { id: string; firstName: string; lastName: string; phone: string; dni: string | null }[];
+  insuranceProviders: { id: string; name: string }[];
 }) {
   const [date, setDate] = useState(todayStr());
   const [professionalId, setProfessionalId] = useState(professionals[0]?.id);
@@ -95,6 +101,9 @@ export function AgendaClient({
       startTime: a.startTime,
       notes: a.notes,
       status: a.status,
+      insuranceProviderId: a.insuranceProviderId,
+      insuranceMemberNumber: a.insuranceMemberNumber,
+      copaymentAmount: a.copaymentAmount,
     });
     setModalOpen(true);
   }
@@ -194,6 +203,7 @@ export function AgendaClient({
                   <p className="text-xs text-slate-500 mt-0.5">{a.serviceName}</p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+                  {a.insuranceProviderName && <Badge color="blue">{a.insuranceProviderName}</Badge>}
                   <StatusBadge status={a.status} />
                   {a.status === "PENDING" && (
                     <button onClick={() => quickStatus(a.id, "CONFIRMED")} className="rounded-lg p-1.5 text-teal-600 hover:bg-teal-50 cursor-pointer" title="Confirmar">
@@ -231,6 +241,7 @@ export function AgendaClient({
         patients={patients}
         professionals={professionals}
         services={services}
+        insuranceProviders={insuranceProviders}
         initial={editing}
         defaultDate={date}
         defaultProfessionalId={professionalId}

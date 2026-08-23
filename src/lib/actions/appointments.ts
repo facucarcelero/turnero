@@ -17,6 +17,8 @@ export type BookingPayload = {
   email?: string;
   dni?: string;
   notes?: string;
+  insuranceProviderId?: string | null;
+  insuranceMemberNumber?: string;
 };
 
 export async function createPublicAppointment(payload: BookingPayload) {
@@ -31,6 +33,8 @@ export async function createPublicAppointment(payload: BookingPayload) {
     email,
     dni,
     notes,
+    insuranceProviderId,
+    insuranceMemberNumber,
   } = payload;
 
   if (!professionalId || !serviceId || !date || !startTime) {
@@ -42,6 +46,20 @@ export async function createPublicAppointment(payload: BookingPayload) {
 
   const service = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!service) return { error: "El servicio seleccionado ya no existe." };
+
+  const professional = await prisma.professional.findUnique({
+    where: { id: professionalId },
+    include: { insuranceProviders: true },
+  });
+  if (!professional) return { error: "El profesional seleccionado ya no existe." };
+
+  // Sólo se guarda la cobertura si este profesional la pide y está entre las que acepta.
+  const validInsuranceId =
+    professional.asksInsurance && insuranceProviderId
+      ? professional.insuranceProviders.some((p) => p.id === insuranceProviderId)
+        ? insuranceProviderId
+        : null
+      : null;
 
   // Revalidamos disponibilidad en el servidor para evitar dobles reservas (race conditions).
   const availableSlots = await getAvailableSlots(professionalId, serviceId, date);
@@ -73,6 +91,8 @@ export async function createPublicAppointment(payload: BookingPayload) {
         phone: phone.trim(),
         email: email?.trim() || patient.email,
         dni: dni?.trim() || patient.dni,
+        insuranceProviderId: validInsuranceId ?? patient.insuranceProviderId,
+        insuranceMemberNumber: insuranceMemberNumber?.trim() || patient.insuranceMemberNumber,
       },
     });
   } else {
@@ -83,6 +103,8 @@ export async function createPublicAppointment(payload: BookingPayload) {
         phone: phone.trim(),
         email: email?.trim() || undefined,
         dni: dni?.trim() || undefined,
+        insuranceProviderId: validInsuranceId,
+        insuranceMemberNumber: insuranceMemberNumber?.trim() || undefined,
       },
     });
   }
@@ -98,6 +120,8 @@ export async function createPublicAppointment(payload: BookingPayload) {
       notes: notes?.trim() || undefined,
       status: "PENDING",
       source: "ONLINE",
+      insuranceProviderId: validInsuranceId,
+      insuranceMemberNumber: insuranceMemberNumber?.trim() || undefined,
     },
   });
 
@@ -196,10 +220,26 @@ export type AdminAppointmentPayload = {
   startTime: string;
   notes?: string;
   status: AppointmentStatus;
+  insuranceProviderId?: string | null;
+  insuranceMemberNumber?: string;
+  copaymentAmount?: number | null;
 };
 
 export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
-  const { id, patientId, newPatient, professionalId, serviceId, date, startTime, notes, status } = payload;
+  const {
+    id,
+    patientId,
+    newPatient,
+    professionalId,
+    serviceId,
+    date,
+    startTime,
+    notes,
+    status,
+    insuranceProviderId,
+    insuranceMemberNumber,
+    copaymentAmount,
+  } = payload;
 
   const user = await getCurrentAdmin();
   if (!user) return { error: "No tenés permisos para realizar esta acción." };
@@ -276,6 +316,9 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
         endTime,
         notes: notes?.trim() || null,
         status,
+        insuranceProviderId: insuranceProviderId || null,
+        insuranceMemberNumber: insuranceMemberNumber?.trim() || null,
+        copaymentAmount: copaymentAmount ?? null,
       },
     });
   } else {
@@ -290,6 +333,9 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
         notes: notes?.trim() || undefined,
         status,
         source: "ADMIN",
+        insuranceProviderId: insuranceProviderId || undefined,
+        insuranceMemberNumber: insuranceMemberNumber?.trim() || undefined,
+        copaymentAmount: copaymentAmount ?? undefined,
       },
     });
   }

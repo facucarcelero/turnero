@@ -9,6 +9,7 @@ import {
   CalendarX2,
   Settings,
   UserCircle,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,7 +37,8 @@ export function getNavItems(role: string, isLinkedProfessional: boolean): NavIte
   if (isManager) {
     items.push(
       { href: "/admin/servicios", label: "Servicios", icon: Stethoscope },
-      { href: "/admin/profesionales", label: "Profesionales", icon: UserCog }
+      { href: "/admin/profesionales", label: "Profesionales", icon: UserCog },
+      { href: "/admin/obras-sociales", label: "Obras sociales", icon: ShieldCheck }
     );
   }
 

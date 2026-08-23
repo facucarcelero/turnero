@@ -12,7 +12,13 @@ import { toggleProfessionalActive, deleteProfessional } from "@/lib/actions/prof
 
 type ProfessionalRow = EditableProfessional & { appointmentsCount: number };
 
-export function ProfesionalesClient({ professionals }: { professionals: ProfessionalRow[] }) {
+export function ProfesionalesClient({
+  professionals,
+  insuranceProviders,
+}: {
+  professionals: ProfessionalRow[];
+  insuranceProviders: { id: string; name: string }[];
+}) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<EditableProfessional | undefined>(undefined);
 
@@ -44,6 +50,11 @@ export function ProfesionalesClient({ professionals }: { professionals: Professi
                 <p className="font-medium text-slate-900">{p.name}</p>
                 {p.specialty && <p className="text-sm text-[var(--brand)]">{p.specialty}</p>}
                 {p.bio && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.bio}</p>}
+                {p.asksInsurance && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    Pide obra social · {p.insuranceProviderIds.length} aceptada(s)
+                  </p>
+                )}
                 <div className="flex items-center gap-3 mt-3">
                   <Link href="/admin/horarios" className="text-xs text-slate-500 flex items-center gap-1 hover:text-slate-800">
                     <Clock className="size-3.5" /> Ver horarios
@@ -70,7 +81,13 @@ export function ProfesionalesClient({ professionals }: { professionals: Professi
         ))}
       </div>
 
-      <ProfessionalFormModal key={editing?.id ?? "new"} open={modalOpen} onClose={() => setModalOpen(false)} initial={editing} />
+      <ProfessionalFormModal
+        key={editing?.id ?? "new"}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        initial={editing}
+        insuranceProviders={insuranceProviders}
+      />
     </div>
   );
 }
