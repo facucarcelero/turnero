@@ -1,10 +1,25 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAvailableSlots } from "@/lib/availability";
 import { getCurrentAdmin } from "@/lib/actions/guard";
+import { checkRateLimit } from "@/lib/rate-limit";
 import type { AppointmentStatus } from "@prisma/client";
+
+const BOOKING_LIMIT = 5;
+const BOOKING_WINDOW_MS = 60 * 60 * 1000;
+
+async function clientIp() {
+  const h = await headers();
+  return h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "unknown";
+}
+
+function slotKeyFor(professionalId: string, date: string, startTime: string, status: AppointmentStatus) {
+  return status === "CANCELLED" ? null : `${professionalId}|${date}|${startTime}`;
+}
 
 export type BookingPayload = {
   professionalId: string;
@@ -44,6 +59,17 @@ export async function createPublicAppointment(payload: BookingPayload) {
     return { error: "Completá nombre, apellido y teléfono." };
   }
 
+  // Límite anti-spam: por teléfono y por IP, para no frenar a un paciente
+  // legítimo que reserva un par de turnos pero sí a un bot/flood.
+  const ip = await clientIp();
+  const [phoneLimit, ipLimit] = await Promise.all([
+    checkRateLimit(`booking:phone:${phone.trim()}`, BOOKING_LIMIT, BOOKING_WINDOW_MS),
+    checkRateLimit(`booking:ip:${ip}`, BOOKING_LIMIT * 3, BOOKING_WINDOW_MS),
+  ]);
+  if (!phoneLimit.allowed || !ipLimit.allowed) {
+    return { error: "Hiciste demasiadas reservas en poco tiempo. Probá de nuevo más tarde." };
+  }
+
   const service = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!service) return { error: "El servicio seleccionado ya no existe." };
 
@@ -74,56 +100,70 @@ export async function createPublicAppointment(payload: BookingPayload) {
 
   const endTime = availableSlots.find((s) => s.startTime === startTime)!.endTime;
 
-  let patient = null;
-  if (dni?.trim()) {
-    patient = await prisma.patient.findFirst({ where: { dni: dni.trim() } });
-  }
-  if (!patient) {
-    patient = await prisma.patient.findFirst({ where: { phone: phone.trim() } });
-  }
+  let appointment;
+  try {
+    appointment = await prisma.$transaction(async (tx) => {
+      let patient = dni?.trim() ? await tx.patient.findFirst({ where: { dni: dni.trim() } }) : null;
+      if (!patient) {
+        patient = await tx.patient.findFirst({ where: { phone: phone.trim() } });
+      }
 
-  if (patient) {
-    patient = await prisma.patient.update({
-      where: { id: patient.id },
-      data: {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        phone: phone.trim(),
-        email: email?.trim() || patient.email,
-        dni: dni?.trim() || patient.dni,
-        insuranceProviderId: validInsuranceId ?? patient.insuranceProviderId,
-        insuranceMemberNumber: insuranceMemberNumber?.trim() || patient.insuranceMemberNumber,
-      },
-    });
-  } else {
-    patient = await prisma.patient.create({
-      data: {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        phone: phone.trim(),
-        email: email?.trim() || undefined,
-        dni: dni?.trim() || undefined,
-        insuranceProviderId: validInsuranceId,
-        insuranceMemberNumber: insuranceMemberNumber?.trim() || undefined,
-      },
-    });
-  }
+      if (patient) {
+        patient = await tx.patient.update({
+          where: { id: patient.id },
+          data: {
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            phone: phone.trim(),
+            email: email?.trim() || patient.email,
+            dni: dni?.trim() || patient.dni,
+            insuranceProviderId: validInsuranceId ?? patient.insuranceProviderId,
+            insuranceMemberNumber: insuranceMemberNumber?.trim() || patient.insuranceMemberNumber,
+          },
+        });
+      } else {
+        patient = await tx.patient.create({
+          data: {
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            phone: phone.trim(),
+            email: email?.trim() || undefined,
+            dni: dni?.trim() || undefined,
+            insuranceProviderId: validInsuranceId,
+            insuranceMemberNumber: insuranceMemberNumber?.trim() || undefined,
+          },
+        });
+      }
 
-  const appointment = await prisma.appointment.create({
-    data: {
-      professionalId,
-      serviceId,
-      patientId: patient.id,
-      date,
-      startTime,
-      endTime,
-      notes: notes?.trim() || undefined,
-      status: "PENDING",
-      source: "ONLINE",
-      insuranceProviderId: validInsuranceId,
-      insuranceMemberNumber: insuranceMemberNumber?.trim() || undefined,
-    },
-  });
+      return tx.appointment.create({
+        data: {
+          professionalId,
+          serviceId,
+          patientId: patient.id,
+          date,
+          startTime,
+          endTime,
+          notes: notes?.trim() || undefined,
+          status: "PENDING",
+          source: "ONLINE",
+          insuranceProviderId: validInsuranceId,
+          insuranceMemberNumber: insuranceMemberNumber?.trim() || undefined,
+          activeSlotKey: slotKeyFor(professionalId, date, startTime, "PENDING"),
+        },
+      });
+    });
+  } catch (err) {
+    // Red de seguridad para la carrera entre el chequeo de disponibilidad de
+    // arriba y el create: si otra reserva ganó la carrera por el mismo
+    // horario, el índice único de activeSlotKey rechaza esta.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return {
+        error: "Ese horario ya no está disponible. Por favor elegí otro horario.",
+        stale: true,
+      };
+    }
+    throw err;
+  }
 
   revalidatePath("/admin");
   revalidatePath("/admin/agenda");
@@ -139,7 +179,7 @@ export async function cancelAppointmentByToken(token: string, reason?: string) {
 
   await prisma.appointment.update({
     where: { id: appointment.id },
-    data: { status: "CANCELLED", cancelReason: reason || "Cancelado por el paciente" },
+    data: { status: "CANCELLED", cancelReason: reason || "Cancelado por el paciente", activeSlotKey: null },
   });
 
   revalidatePath("/admin");
@@ -171,19 +211,25 @@ export async function updateAppointmentStatus(id: string, status: AppointmentSta
   const user = await getCurrentAdmin();
   if (!user) return { error: "No tenés permisos para realizar esta acción." };
 
-  if (user.role === "STAFF" && user.professionalId) {
-    const appointment = await prisma.appointment.findUnique({ where: { id } });
-    if (!appointment || appointment.professionalId !== user.professionalId) {
-      return { error: "Sólo podés gestionar turnos de tu propia agenda." };
-    }
+  const appointment = await prisma.appointment.findUnique({ where: { id } });
+  if (!appointment) return { error: "No se pudo actualizar el turno." };
+  if (user.role === "STAFF" && user.professionalId && appointment.professionalId !== user.professionalId) {
+    return { error: "Sólo podés gestionar turnos de tu propia agenda." };
   }
 
   try {
     await prisma.appointment.update({
       where: { id },
-      data: { status, cancelReason: status === "CANCELLED" ? reason : undefined },
+      data: {
+        status,
+        cancelReason: status === "CANCELLED" ? reason : undefined,
+        activeSlotKey: slotKeyFor(appointment.professionalId, appointment.date, appointment.startTime, status),
+      },
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return { error: "Ese horario ya está ocupado por otro turno activo." };
+    }
     return { error: "No se pudo actualizar el turno." };
   }
   revalidatePath("/admin");
@@ -304,40 +350,49 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
     return { error: "Ese horario se superpone con otro turno existente." };
   }
 
-  if (id) {
-    await prisma.appointment.update({
-      where: { id },
-      data: {
-        patientId: finalPatientId,
-        professionalId,
-        serviceId,
-        date,
-        startTime,
-        endTime,
-        notes: notes?.trim() || null,
-        status,
-        insuranceProviderId: insuranceProviderId || null,
-        insuranceMemberNumber: insuranceMemberNumber?.trim() || null,
-        copaymentAmount: copaymentAmount ?? null,
-      },
-    });
-  } else {
-    await prisma.appointment.create({
-      data: {
-        patientId: finalPatientId,
-        professionalId,
-        serviceId,
-        date,
-        startTime,
-        endTime,
-        notes: notes?.trim() || undefined,
-        status,
-        source: "ADMIN",
-        insuranceProviderId: insuranceProviderId || undefined,
-        insuranceMemberNumber: insuranceMemberNumber?.trim() || undefined,
-        copaymentAmount: copaymentAmount ?? undefined,
-      },
-    });
+  try {
+    if (id) {
+      await prisma.appointment.update({
+        where: { id },
+        data: {
+          patientId: finalPatientId,
+          professionalId,
+          serviceId,
+          date,
+          startTime,
+          endTime,
+          notes: notes?.trim() || null,
+          status,
+          insuranceProviderId: insuranceProviderId || null,
+          insuranceMemberNumber: insuranceMemberNumber?.trim() || null,
+          copaymentAmount: copaymentAmount ?? null,
+          activeSlotKey: slotKeyFor(professionalId, date, startTime, status),
+        },
+      });
+    } else {
+      await prisma.appointment.create({
+        data: {
+          patientId: finalPatientId,
+          professionalId,
+          serviceId,
+          date,
+          startTime,
+          endTime,
+          notes: notes?.trim() || undefined,
+          status,
+          source: "ADMIN",
+          insuranceProviderId: insuranceProviderId || undefined,
+          insuranceMemberNumber: insuranceMemberNumber?.trim() || undefined,
+          copaymentAmount: copaymentAmount ?? undefined,
+          activeSlotKey: slotKeyFor(professionalId, date, startTime, status),
+        },
+      });
+    }
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return { error: "Ese horario ya está ocupado por otro turno activo." };
+    }
+    throw err;
   }
 
   revalidatePath("/admin");

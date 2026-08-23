@@ -225,7 +225,23 @@ model Appointment {
   copaymentAmount       Float?
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
+  // Igual a "professionalId|date|startTime" mientras el turno está activo
+  // (no cancelado), y null si está cancelado. El índice único de abajo
+  // evita que dos reservas concurrentes se queden con el mismo horario;
+  // al ser null en los cancelados, ese horario vuelve a quedar libre para
+  // que otro turno lo use. Se mantiene en código (ver src/lib/actions/appointments.ts).
+  activeSlotKey         String?            @unique
 
   @@index([date, professionalId])
   @@index([patientId])
+}
+
+// ============================================================
+// RATE LIMITING (login y reserva pública)
+// ============================================================
+
+model RateLimitEntry {
+  key         String   @id // ej: "login:email@x.com" o "booking:190.1.2.3"
+  count       Int      @default(1)
+  windowStart DateTime @default(now())
 }
