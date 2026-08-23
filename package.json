@@ -2,9 +2,12 @@
   "name": "turnero-app",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev -p 2001",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start -p 2001",
     "lint": "eslint",
     "db:seed": "tsx prisma/seed.ts",
@@ -28,6 +31,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.15.13",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
