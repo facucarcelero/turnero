@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 import { initials } from "@/lib/utils";
 
@@ -7,6 +9,11 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ callbackUrl?: string }>;
 }) {
+  const session = await auth();
+  if (session?.user) {
+    redirect("/admin");
+  }
+
   const { callbackUrl } = await searchParams;
   const clinic = await prisma.clinic.findFirst();
 

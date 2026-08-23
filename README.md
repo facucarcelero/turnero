@@ -127,7 +127,7 @@ Para dar de alta el acceso de un profesional a la agenda, desde **Configuración
    (o simplemente corré `npx prisma migrate deploy` con esas variables ya cargadas en tu `.env` si usás la misma base para todo).
 4. Redeploy en Netlify.
 
-El middleware (`src/proxy.ts`) usa una configuración de auth separada y liviana (`src/lib/auth.config.ts`), sin Prisma ni bcrypt, para no romper el runtime restringido de Netlify — no lo modifiques para que no vuelva a importar Prisma ahí.
+La protección de `/admin` (exigir login) se resuelve en `src/app/admin/(protected)/layout.tsx`, no con un middleware/proxy de Next.js: en Next.js 16 ese archivo corre en un runtime que el plugin de Netlify todavía no soporta del todo bien (lo probamos y rompía el login en producción con un 404), así que se optó por el patrón recomendado por los propios docs de Next — chequear la sesión directamente en el layout de las páginas protegidas. `src/lib/auth.config.ts` sigue siendo la configuración liviana (sin Prisma ni bcrypt) que extiende `src/lib/auth.ts`; no hace falta tocarla.
 
 ---
 
