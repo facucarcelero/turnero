@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
@@ -6,9 +6,18 @@ import { prisma } from "@/lib/prisma";
 // quedó pendiente en producción (no hay acceso de terminal a la base) y
 // deja creadas/reseteadas las cuentas de prueba pedidas. Protegida por una
 // clave fija en la URL. Se borra apenas confirmemos que funcionó.
-const SETUP_KEY = "5221de92acefb460d886cf872b35134c";
+//
+// Las contraseñas se generan al azar en cada ejecución (nunca quedan
+// escritas en el código/git) — la versión anterior de este archivo sí las
+// tenía hardcodeadas en texto plano y GitGuardian las marcó como secretos
+// filtrados, así que además de rotarlas quedan generadas en runtime.
+const SETUP_KEY = "05f1d27a7a3d937e9c115b34e20b4523";
 const MIGRATION_NAME = "20260823120000_professional_self_service";
 const MIGRATION_CHECKSUM = "43577d45b500b60763343b861a6116a65258da2a70810d10ce2d6218a802e240";
+
+function randomPassword() {
+  return randomBytes(9).toString("base64").replace(/[+/=]/g, "").slice(0, 10);
+}
 
 async function ensureMigrationApplied() {
   await prisma.$executeRawUnsafe(`ALTER TABLE "AdminUser" ADD COLUMN IF NOT EXISTS "professionalId" TEXT;`);
@@ -43,7 +52,7 @@ async function ensureMigrationApplied() {
 async function ensureAccounts() {
   const results: { label: string; email: string; password: string }[] = [];
 
-  const ownerPassword = "Admin123!";
+  const ownerPassword = randomPassword();
   await prisma.adminUser.upsert({
     where: { email: "admin@clinica.com" },
     update: { passwordHash: await bcrypt.hash(ownerPassword, 10), role: "OWNER", active: true },
@@ -58,7 +67,7 @@ async function ensureAccounts() {
 
   const professional = await prisma.professional.findFirst({ orderBy: { order: "asc" } });
   if (professional) {
-    const proPassword = "Doctora123!";
+    const proPassword = randomPassword();
     const linkedTo = await prisma.adminUser.findUnique({ where: { professionalId: professional.id } });
     if (!linkedTo) {
       await prisma.adminUser.upsert({
@@ -78,15 +87,19 @@ async function ensureAccounts() {
         password: proPassword,
       });
     } else {
+      await prisma.adminUser.update({
+        where: { id: linkedTo.id },
+        data: { passwordHash: await bcrypt.hash(proPassword, 10) },
+      });
       results.push({
-        label: `Profesional vinculado (${professional.name}) — ya existía`,
+        label: `Profesional vinculado (${professional.name})`,
         email: linkedTo.email,
-        password: "(sin cambios)",
+        password: proPassword,
       });
     }
   }
 
-  const staffPassword = "Secretaria123!";
+  const staffPassword = randomPassword();
   await prisma.adminUser.upsert({
     where: { email: "secretaria@clinicavitalis.com" },
     update: { passwordHash: await bcrypt.hash(staffPassword, 10), role: "STAFF", active: true },
@@ -131,7 +144,7 @@ export default async function SetupInicialPage({
         ) : (
           <>
             <p className="text-sm text-slate-500">
-              Base actualizada. Estas son las cuentas para entrar en <code>/admin/login</code>:
+              Base actualizada y contraseñas renovadas. Estas son las cuentas para entrar en <code>/admin/login</code>:
             </p>
             <div className="space-y-3">
               {accounts.map((a) => (
@@ -146,8 +159,8 @@ export default async function SetupInicialPage({
                 </div>
               ))}
             </div>
-            <p className="text-xs text-slate-400">
-              Cambiá estas contraseñas apenas entres (Configuración, o &quot;Mi perfil&quot; para el profesional).
+            <p className="text-xs text-red-600 font-medium">
+              Guardalas ahora: esta página se va a borrar apenas confirmes que entraste bien, y no van a volver a mostrarse.
             </p>
           </>
         )}

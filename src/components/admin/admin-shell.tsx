@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, LogOut, ChevronRight } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
-import { splitMobileNav, type NavItem } from "./nav-items";
+import { getNavItems, splitMobileNav } from "./nav-items";
 import { signOutAction } from "@/lib/actions/session";
 
 function isActive(pathname: string, href: string) {
@@ -17,17 +17,22 @@ export function AdminShell({
   clinicName,
   userName,
   userRole,
-  navItems,
+  isLinkedProfessional,
   children,
 }: {
   clinicName: string;
   userName: string;
   userRole: string;
-  navItems: NavItem[];
+  isLinkedProfessional: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  // Los ítems de nav (con referencias a componentes de ícono) se calculan acá,
+  // del lado del cliente: un Server Component no puede pasarle a un Client
+  // Component una función/componente como prop, sólo datos serializables
+  // (por eso el layout server sólo manda el rol y si hay profesional vinculado).
+  const navItems = getNavItems(userRole, isLinkedProfessional);
   const { primary: MOBILE_PRIMARY, more: MOBILE_MORE } = splitMobileNav(navItems);
 
   return (

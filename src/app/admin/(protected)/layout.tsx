@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AdminShell } from "@/components/admin/admin-shell";
-import { getNavItems } from "@/components/admin/nav-items";
 
 // Todas las páginas bajo (protected) requieren sesión. Antes esto lo
 // resolvía src/proxy.ts (middleware), pero Next.js 16 corre el proxy en un
@@ -25,7 +24,7 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
       clinicName={clinic?.name ?? "Turnero"}
       userName={session.user.name ?? "Admin"}
       userRole={role}
-      navItems={getNavItems(role, !!professionalId)}
+      isLinkedProfessional={!!professionalId}
     >
       {children}
     </AdminShell>
