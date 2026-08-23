@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Save, KeyRound } from "lucide-react";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input, Label, Textarea, FieldError } from "@/components/ui/field";
+import { Input, Label, Textarea, FieldError, PasswordInput } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 import { updateOwnProfessionalProfile, updateOwnPassword } from "@/lib/actions/profile";
 
@@ -136,24 +136,21 @@ export function MiPerfilClient({
         <CardBody className="space-y-4">
           <div>
             <Label>Contraseña actual</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={pwForm.currentPassword}
               onChange={(e) => setPwForm((f) => ({ ...f, currentPassword: e.target.value }))}
             />
           </div>
           <div>
             <Label>Nueva contraseña</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={pwForm.newPassword}
               onChange={(e) => setPwForm((f) => ({ ...f, newPassword: e.target.value }))}
             />
           </div>
           <div>
             <Label>Repetir nueva contraseña</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={pwForm.confirm}
               onChange={(e) => setPwForm((f) => ({ ...f, confirm: e.target.value }))}
             />

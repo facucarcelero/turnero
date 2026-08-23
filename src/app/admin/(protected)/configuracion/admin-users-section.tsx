@@ -6,7 +6,7 @@ import { Plus, Pencil } from "lucide-react";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Input, Label, Select, FieldError } from "@/components/ui/field";
+import { Input, Label, Select, FieldError, PasswordInput } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { initials } from "@/lib/utils";
@@ -108,7 +108,7 @@ export function AdminUsersSection({ users, professionals }: { users: AdminUserRo
           </div>
           <div>
             <Label>{editing ? "Nueva contraseña (opcional)" : "Contraseña"}</Label>
-            <Input type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} />
+            <PasswordInput value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} />
           </div>
           <div>
             <Label>Rol</Label>
