@@ -5,6 +5,7 @@ import { todayStr, addDaysStr, formatDateLong } from "@/lib/time";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
 import { formatCurrency, initials } from "@/lib/utils";
+import { computeTotals } from "@/lib/combo-totals";
 import {
   CalendarDays,
   Users,
@@ -26,7 +27,7 @@ export default async function AdminDashboardPage() {
   const [todayAppointments, weekCount, pendingCount, patientsCount, clinic] = await Promise.all([
     prisma.appointment.findMany({
       where: { date: today, status: { not: "CANCELLED" }, ...scopeFilter },
-      include: { patient: true, service: true, professional: true },
+      include: { patient: true, service: true, extraServices: true, combo: true, professional: true },
       orderBy: { startTime: "asc" },
     }),
     prisma.appointment.count({
@@ -124,7 +125,7 @@ export default async function AdminDashboardPage() {
                       {a.patient.firstName} {a.patient.lastName}
                     </p>
                     <p className="text-xs text-slate-500 truncate">
-                      {a.service.name} · {a.professional.name}
+                      {[a.service, ...a.extraServices].map((s) => s.name).join(" + ")} · {a.professional.name}
                     </p>
                   </div>
                   <StatusBadge status={a.status} />
@@ -149,7 +150,7 @@ export default async function AdminDashboardPage() {
         <p className="text-xs text-slate-400 text-center">
           Facturación estimada del día:{" "}
           {formatCurrency(
-            todayAppointments.reduce((sum, a) => sum + a.service.price, 0),
+            todayAppointments.reduce((sum, a) => sum + computeTotals([a.service, ...a.extraServices], a.combo).totalPrice, 0),
             clinic.currency
           )}
         </p>

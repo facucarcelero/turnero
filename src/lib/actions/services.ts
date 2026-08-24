@@ -51,9 +51,17 @@ export async function upsertService(payload: {
 
 export async function deleteService(id: string) {
   await requireRole("ADMIN");
-  const count = await prisma.appointment.count({ where: { serviceId: id } });
+  const [asPrimary, asExtra, inCombo] = await Promise.all([
+    prisma.appointment.count({ where: { serviceId: id } }),
+    prisma.appointment.count({ where: { extraServices: { some: { id } } } }),
+    prisma.serviceCombo.count({ where: { services: { some: { id } } } }),
+  ]);
+  const count = asPrimary + asExtra;
   if (count > 0) {
     return { error: `No se puede eliminar: tiene ${count} turno(s) asociado(s). Podés desactivarlo.` };
+  }
+  if (inCombo > 0) {
+    return { error: "No se puede eliminar: está en un combo. Podés desactivarlo." };
   }
   await prisma.service.delete({ where: { id } });
   revalidatePath("/admin/servicios");

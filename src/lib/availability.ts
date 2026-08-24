@@ -5,6 +5,7 @@ import {
   timeToMinutes,
   weekdayOf,
 } from "@/lib/time";
+import { resolveServiceCombo, computeTotals } from "@/lib/service-combo";
 
 export type Slot = {
   startTime: string;
@@ -12,19 +13,22 @@ export type Slot = {
 };
 
 /**
- * Calcula los horarios disponibles para un profesional + servicio en una fecha dada.
- * Combina: horario laboral semanal, bloqueos puntuales, turnos ya reservados y
- * las reglas de anticipación mínima definidas en la configuración de la clínica.
+ * Calcula los horarios disponibles para un profesional + uno o más servicios
+ * en una fecha dada. Combina: horario laboral semanal, bloqueos puntuales,
+ * turnos ya reservados y las reglas de anticipación mínima definidas en la
+ * configuración de la clínica. La duración total es la de un combo
+ * configurado (si la combinación de servicios matchea uno) o la suma de las
+ * duraciones individuales.
  */
 export async function getAvailableSlots(
   professionalId: string,
-  serviceId: string,
+  serviceIds: string[],
   date: string
 ): Promise<Slot[]> {
-  const [clinic, service, workingHours, blockedSlots, appointments] =
+  const [clinic, services, workingHours, blockedSlots, appointments, combo] =
     await Promise.all([
       prisma.clinic.findFirst(),
-      prisma.service.findUnique({ where: { id: serviceId } }),
+      prisma.service.findMany({ where: { id: { in: serviceIds } } }),
       prisma.workingHour.findMany({
         where: { professionalId, weekday: weekdayOf(date), active: true },
       }),
@@ -41,11 +45,12 @@ export async function getAvailableSlots(
           status: { not: "CANCELLED" },
         },
       }),
+      resolveServiceCombo(serviceIds),
     ]);
 
-  if (!service || workingHours.length === 0) return [];
+  if (services.length !== serviceIds.length || workingHours.length === 0) return [];
 
-  const duration = service.durationMin;
+  const { totalDurationMin: duration } = computeTotals(services, combo);
   const step = clinic?.slotDurationMin ?? 30;
   const minNoticeMinutes = (clinic?.minNoticeHours ?? 0) * 60;
 

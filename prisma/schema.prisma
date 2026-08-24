@@ -109,17 +109,36 @@ model Professional {
 // ============================================================
 
 model Service {
-  id            String         @id @default(cuid())
-  name          String
-  description   String?
-  durationMin   Int            @default(30)
-  price         Float          @default(0)
-  color         String         @default("#0d9488")
-  active        Boolean        @default(true)
-  order         Int            @default(0)
-  professionals Professional[] @relation("ProfessionalServices")
-  appointments  Appointment[]
-  createdAt     DateTime       @default(now())
+  id                   String         @id @default(cuid())
+  name                 String
+  description          String?
+  durationMin          Int            @default(30)
+  price                Float          @default(0)
+  color                String         @default("#0d9488")
+  active               Boolean        @default(true)
+  order                Int            @default(0)
+  professionals        Professional[] @relation("ProfessionalServices")
+  appointments         Appointment[]
+  extraForAppointments Appointment[]  @relation("AppointmentExtraServices")
+  combos               ServiceCombo[] @relation("ComboServices")
+  createdAt            DateTime       @default(now())
+}
+
+// ============================================================
+// SERVICE COMBOS (combinaciones de servicios con precio/duración propios)
+// ============================================================
+
+model ServiceCombo {
+  id           String        @id @default(cuid())
+  name         String?
+  services     Service[]     @relation("ComboServices")
+  // null = se calcula como la suma de los precios/duraciones individuales
+  price        Float?
+  durationMin  Int?
+  active       Boolean       @default(true)
+  order        Int           @default(0)
+  createdAt    DateTime      @default(now())
+  appointments Appointment[]
 }
 
 // ============================================================
@@ -208,6 +227,14 @@ model Appointment {
   professionalId        String
   service               Service            @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   serviceId             String
+  // Servicios adicionales combinados en este mismo turno (más allá del
+  // "primario" de arriba). Vacío = turno de un solo servicio (caso de
+  // siempre, sin cambios de comportamiento).
+  extraServices         Service[]          @relation("AppointmentExtraServices")
+  // Combo configurado que matcheó la combinación elegida (precio/duración
+  // propios), si corresponde. Null = se usa la suma de los servicios.
+  combo                 ServiceCombo?      @relation(fields: [comboId], references: [id], onDelete: SetNull)
+  comboId               String?
   date                  String // "2026-08-21"
   startTime             String // "09:00"
   endTime               String // "09:30"

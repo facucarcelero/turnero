@@ -26,14 +26,16 @@ type AppointmentRow = {
   patientPhone: string;
   professionalId: string;
   professionalName: string;
-  serviceId: string;
+  serviceIds: string[];
   serviceName: string;
-  servicePrice: number;
+  totalPrice: number;
   insuranceProviderId: string | null;
   insuranceProviderName: string | null;
   insuranceMemberNumber: string | null;
   copaymentAmount: number | null;
 };
+
+type ServiceComboOption = { id: string; name: string | null; price: number | null; durationMin: number | null; serviceIds: string[] };
 
 const FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: "ALL", label: "Todos los estados" },
@@ -55,12 +57,14 @@ export function TurnosClient({
   appointments,
   professionals,
   services,
+  combos,
   patients,
   insuranceProviders,
 }: {
   appointments: AppointmentRow[];
   professionals: { id: string; name: string }[];
-  services: { id: string; name: string; durationMin: number }[];
+  services: { id: string; name: string; durationMin: number; price: number }[];
+  combos: ServiceComboOption[];
   patients: { id: string; firstName: string; lastName: string; phone: string; dni: string | null }[];
   insuranceProviders: { id: string; name: string }[];
 }) {
@@ -100,7 +104,7 @@ export function TurnosClient({
       patientId: a.patientId,
       patientName: a.patientName,
       professionalId: a.professionalId,
-      serviceId: a.serviceId,
+      serviceIds: a.serviceIds,
       date: a.date,
       startTime: a.startTime,
       notes: a.notes,
@@ -191,7 +195,7 @@ export function TurnosClient({
                     <PhoneCall className="size-3" /> {a.patientPhone}
                   </p>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {a.serviceName} · {a.professionalName} · {formatCurrency(a.servicePrice)}
+                    {a.serviceName} · {a.professionalName} · {formatCurrency(a.totalPrice)}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap sm:justify-end">
@@ -256,6 +260,7 @@ export function TurnosClient({
         patients={patients}
         professionals={professionals}
         services={services}
+        combos={combos}
         insuranceProviders={insuranceProviders}
         initial={editing}
         defaultDate={today}

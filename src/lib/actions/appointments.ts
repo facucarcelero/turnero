@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAvailableSlots } from "@/lib/availability";
+import { resolveServiceCombo, computeTotals } from "@/lib/service-combo";
 import { getCurrentAdmin } from "@/lib/actions/guard";
 import { checkRateLimit } from "@/lib/rate-limit";
 import type { AppointmentStatus } from "@prisma/client";
@@ -23,7 +24,7 @@ function slotKeyFor(professionalId: string, date: string, startTime: string, sta
 
 export type BookingPayload = {
   professionalId: string;
-  serviceId: string;
+  serviceIds: string[];
   date: string;
   startTime: string;
   firstName: string;
@@ -39,7 +40,7 @@ export type BookingPayload = {
 export async function createPublicAppointment(payload: BookingPayload) {
   const {
     professionalId,
-    serviceId,
+    serviceIds,
     date,
     startTime,
     firstName,
@@ -52,7 +53,7 @@ export async function createPublicAppointment(payload: BookingPayload) {
     insuranceMemberNumber,
   } = payload;
 
-  if (!professionalId || !serviceId || !date || !startTime) {
+  if (!professionalId || !serviceIds?.length || !date || !startTime) {
     return { error: "Faltan datos del turno. Volvé a intentar." };
   }
   if (!firstName?.trim() || !lastName?.trim() || !phone?.trim()) {
@@ -70,8 +71,8 @@ export async function createPublicAppointment(payload: BookingPayload) {
     return { error: "Hiciste demasiadas reservas en poco tiempo. Probá de nuevo más tarde." };
   }
 
-  const service = await prisma.service.findUnique({ where: { id: serviceId } });
-  if (!service) return { error: "El servicio seleccionado ya no existe." };
+  const services = await prisma.service.findMany({ where: { id: { in: serviceIds } } });
+  if (services.length !== serviceIds.length) return { error: "Alguno de los servicios seleccionados ya no existe." };
 
   const professional = await prisma.professional.findUnique({
     where: { id: professionalId },
@@ -79,16 +80,15 @@ export async function createPublicAppointment(payload: BookingPayload) {
   });
   if (!professional) return { error: "El profesional seleccionado ya no existe." };
 
-  // Sólo se guarda la cobertura si este profesional la pide y está entre las que acepta.
-  const validInsuranceId =
-    professional.asksInsurance && insuranceProviderId
-      ? professional.insuranceProviders.some((p) => p.id === insuranceProviderId)
-        ? insuranceProviderId
-        : null
-      : null;
+  // La cobertura se guarda si existe y está activa, sin depender del profesional.
+  const validInsuranceId = insuranceProviderId
+    ? (await prisma.insuranceProvider.findFirst({ where: { id: insuranceProviderId, active: true } }))
+      ? insuranceProviderId
+      : null
+    : null;
 
   // Revalidamos disponibilidad en el servidor para evitar dobles reservas (race conditions).
-  const availableSlots = await getAvailableSlots(professionalId, serviceId, date);
+  const availableSlots = await getAvailableSlots(professionalId, serviceIds, date);
   const stillAvailable = availableSlots.some((s) => s.startTime === startTime);
   if (!stillAvailable) {
     return {
@@ -99,6 +99,8 @@ export async function createPublicAppointment(payload: BookingPayload) {
   }
 
   const endTime = availableSlots.find((s) => s.startTime === startTime)!.endTime;
+  const combo = await resolveServiceCombo(serviceIds);
+  const [serviceId, ...extraServiceIds] = serviceIds;
 
   let appointment;
   try {
@@ -139,6 +141,8 @@ export async function createPublicAppointment(payload: BookingPayload) {
         data: {
           professionalId,
           serviceId,
+          extraServices: extraServiceIds.length ? { connect: extraServiceIds.map((id) => ({ id })) } : undefined,
+          comboId: combo?.id,
           patientId: patient.id,
           date,
           startTime,
@@ -196,7 +200,7 @@ export async function findAppointmentsByContact(phone: string, dni?: string) {
         dni ? { patient: { dni: dni.trim() } } : undefined,
       ].filter(Boolean) as object[],
     },
-    include: { service: true, professional: true, patient: true },
+    include: { service: true, extraServices: true, professional: true, patient: true },
     orderBy: [{ date: "desc" }, { startTime: "desc" }],
     take: 30,
   });
@@ -261,7 +265,7 @@ export type AdminAppointmentPayload = {
   patientId?: string;
   newPatient?: { firstName: string; lastName: string; phone: string; email?: string; dni?: string };
   professionalId: string;
-  serviceId: string;
+  serviceIds: string[];
   date: string;
   startTime: string;
   notes?: string;
@@ -277,7 +281,7 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
     patientId,
     newPatient,
     professionalId,
-    serviceId,
+    serviceIds,
     date,
     startTime,
     notes,
@@ -299,15 +303,19 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
     }
   }
 
-  if (!professionalId || !serviceId || !date || !startTime) {
+  if (!professionalId || !serviceIds?.length || !date || !startTime) {
     return { error: "Completá todos los campos obligatorios." };
   }
 
-  const service = await prisma.service.findUnique({ where: { id: serviceId } });
-  if (!service) return { error: "Servicio inválido." };
+  const services = await prisma.service.findMany({ where: { id: { in: serviceIds } } });
+  if (services.length !== serviceIds.length) return { error: "Servicio inválido." };
+
+  const combo = await resolveServiceCombo(serviceIds);
+  const { totalDurationMin } = computeTotals(services, combo);
+  const [serviceId, ...extraServiceIds] = serviceIds;
 
   const [h, m] = startTime.split(":").map(Number);
-  const endMinutes = h * 60 + m + service.durationMin;
+  const endMinutes = h * 60 + m + totalDurationMin;
   const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
 
   let finalPatientId = patientId;
@@ -358,6 +366,8 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
           patientId: finalPatientId,
           professionalId,
           serviceId,
+          extraServices: { set: extraServiceIds.map((eid) => ({ id: eid })) },
+          comboId: combo?.id ?? null,
           date,
           startTime,
           endTime,
@@ -375,6 +385,8 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
           patientId: finalPatientId,
           professionalId,
           serviceId,
+          extraServices: extraServiceIds.length ? { connect: extraServiceIds.map((eid) => ({ id: eid })) } : undefined,
+          comboId: combo?.id,
           date,
           startTime,
           endTime,

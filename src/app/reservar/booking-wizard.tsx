@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { formatDateMedium, todayStr } from "@/lib/time";
+import { findMatchingCombo, computeTotals } from "@/lib/combo-totals";
 import { DayPicker } from "@/components/public/day-picker";
 import { Input, Label, Select, Textarea, FieldError } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -32,8 +33,16 @@ type ProfessionalDTO = {
   name: string;
   specialty: string | null;
   color: string;
-  asksInsurance: boolean;
-  insuranceProviders: { id: string; name: string }[];
+};
+
+type InsuranceProviderDTO = { id: string; name: string };
+
+type ComboDTO = {
+  id: string;
+  name: string | null;
+  price: number | null;
+  durationMin: number | null;
+  serviceIds: string[];
 };
 
 type ClinicInfo = {
@@ -48,21 +57,23 @@ const STEPS = ["Servicio", "Profesional", "Fecha y hora", "Tus datos", "Listo"] 
 export function BookingWizard({
   services,
   professionals,
+  insuranceProviders,
+  combos,
   clinic,
   preselectedServiceId,
 }: {
   services: ServiceDTO[];
   professionals: ProfessionalDTO[];
+  insuranceProviders: InsuranceProviderDTO[];
+  combos: ComboDTO[];
   clinic: ClinicInfo;
   preselectedServiceId?: string;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
 
-  const [serviceId, setServiceId] = useState<string | undefined>(
-    preselectedServiceId && services.some((s) => s.id === preselectedServiceId)
-      ? preselectedServiceId
-      : undefined
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(
+    preselectedServiceId && services.some((s) => s.id === preselectedServiceId) ? [preselectedServiceId] : []
   );
   const [professionalId, setProfessionalId] = useState<string | undefined>(undefined);
   const [date, setDate] = useState(todayStr());
@@ -84,19 +95,32 @@ export function BookingWizard({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ appointmentId: string; cancelToken: string } | null>(null);
 
-  const service = services.find((s) => s.id === serviceId);
+  const selectedServices = useMemo(
+    () => services.filter((s) => selectedServiceIds.includes(s.id)),
+    [services, selectedServiceIds]
+  );
   const professional = professionals.find((p) => p.id === professionalId);
 
-  const availableProfessionals = useMemo(
-    () => professionals.filter((p) => service?.professionalIds.includes(p.id)),
-    [professionals, service]
+  const matchingCombo = useMemo(
+    () => findMatchingCombo(selectedServiceIds, combos),
+    [selectedServiceIds, combos]
   );
+  const totals = useMemo(() => computeTotals(selectedServices, matchingCombo), [selectedServices, matchingCombo]);
+  const serviceIdsKey = selectedServiceIds.join(",");
 
-  function selectService(s: ServiceDTO) {
-    setServiceId(s.id);
-    const avail = professionals.filter((p) => s.professionalIds.includes(p.id));
-    if (avail.length === 1) {
-      setProfessionalId(avail[0].id);
+  const availableProfessionals = useMemo(() => {
+    if (selectedServices.length === 0) return [];
+    return professionals.filter((p) => selectedServices.every((s) => s.professionalIds.includes(p.id)));
+  }, [professionals, selectedServices]);
+
+  function toggleService(id: string) {
+    setSelectedServiceIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function continueFromServices() {
+    if (selectedServiceIds.length === 0) return;
+    if (availableProfessionals.length === 1) {
+      setProfessionalId(availableProfessionals[0].id);
       setStep(2);
     } else {
       setProfessionalId(undefined);
@@ -105,13 +129,13 @@ export function BookingWizard({
   }
 
   useEffect(() => {
-    if (!professionalId || !serviceId || step !== 2) return;
+    if (!professionalId || !serviceIdsKey || step !== 2) return;
     let ignore = false;
     // Feedback inmediato de carga: patrón estándar de fetching en efectos (React docs).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingSlots(true);
     setTime(undefined);
-    fetch(`/api/slots?professionalId=${professionalId}&serviceId=${serviceId}&date=${date}`)
+    fetch(`/api/slots?professionalId=${professionalId}&serviceIds=${serviceIdsKey}&date=${date}`)
       .then((r) => r.json())
       .then((data) => {
         if (!ignore) setSlots(data.slots ?? []);
@@ -125,15 +149,15 @@ export function BookingWizard({
     return () => {
       ignore = true;
     };
-  }, [professionalId, serviceId, date, step]);
+  }, [professionalId, serviceIdsKey, date, step]);
 
   async function handleSubmit() {
-    if (!serviceId || !professionalId || !date || !time) return;
+    if (selectedServiceIds.length === 0 || !professionalId || !date || !time) return;
     setSubmitting(true);
     setError(null);
     const res = await createPublicAppointment({
       professionalId,
-      serviceId,
+      serviceIds: selectedServiceIds,
       date,
       startTime: time,
       ...form,
@@ -163,6 +187,8 @@ export function BookingWizard({
     }
   }
 
+  const serviceNames = selectedServices.map((s) => s.name).join(" + ");
+
   return (
     <div>
       {step < 4 && (
@@ -189,40 +215,72 @@ export function BookingWizard({
         </button>
       )}
 
-      {/* Step 0: servicio */}
+      {/* Step 0: servicio(s) */}
       {step === 0 && (
         <div className="animate-fade-in">
           <h1 className="text-xl font-semibold text-slate-900 mb-1">¿Qué servicio necesitás?</h1>
-          <p className="text-sm text-slate-500 mb-5">Elegí el tipo de consulta para ver los horarios disponibles.</p>
+          <p className="text-sm text-slate-500 mb-5">Podés elegir uno o más servicios para el mismo turno.</p>
           <div className="space-y-2.5">
-            {services.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => selectService(s)}
-                className={cn(
-                  "w-full text-left rounded-2xl border bg-white p-4 flex items-center justify-between transition hover:border-[var(--brand)]",
-                  serviceId === s.id ? "border-[var(--brand)] ring-2 ring-[var(--brand)]/15" : "border-slate-200"
-                )}
-              >
-                <div className="flex items-start gap-3 min-w-0">
-                  <span className="size-2.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: s.color }} />
-                  <div className="min-w-0">
-                    <p className="font-medium text-slate-900">{s.name}</p>
-                    {s.description && <p className="text-sm text-slate-500 mt-0.5 truncate">{s.description}</p>}
-                    <p className="text-xs text-slate-400 mt-1">{s.durationMin} min · {formatCurrency(s.price, clinic.currency)}</p>
+            {services.map((s) => {
+              const selected = selectedServiceIds.includes(s.id);
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => toggleService(s.id)}
+                  className={cn(
+                    "w-full text-left rounded-2xl border bg-white p-4 flex items-center justify-between transition hover:border-[var(--brand)]",
+                    selected ? "border-[var(--brand)] ring-2 ring-[var(--brand)]/15" : "border-slate-200"
+                  )}
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span
+                      className={cn(
+                        "size-5 rounded-md border-2 mt-0.5 shrink-0 flex items-center justify-center transition",
+                        selected ? "bg-[var(--brand)] border-[var(--brand)]" : "border-slate-300"
+                      )}
+                    >
+                      {selected && <Check className="size-3.5 text-white" />}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900">{s.name}</p>
+                      {s.description && <p className="text-sm text-slate-500 mt-0.5 truncate">{s.description}</p>}
+                      <p className="text-xs text-slate-400 mt-1">{s.durationMin} min · {formatCurrency(s.price, clinic.currency)}</p>
+                    </div>
                   </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
+
+          {selectedServiceIds.length > 0 && (
+            <div className="rounded-2xl bg-teal-50/60 border border-teal-100 p-3.5 mt-4 flex items-center justify-between text-sm text-slate-700">
+              <span>{selectedServiceIds.length} servicio{selectedServiceIds.length > 1 ? "s" : ""} · {totals.totalDurationMin} min</span>
+              <span className="font-semibold">{formatCurrency(totals.totalPrice, clinic.currency)}</span>
+            </div>
+          )}
+
+          {selectedServiceIds.length > 0 && availableProfessionals.length === 0 && (
+            <p className="text-sm text-amber-600 mt-3">
+              Esta combinación de servicios no la ofrece un mismo profesional. Probá con otra combinación.
+            </p>
+          )}
+
+          <Button
+            className="w-full mt-5"
+            size="lg"
+            disabled={selectedServiceIds.length === 0 || availableProfessionals.length === 0}
+            onClick={continueFromServices}
+          >
+            Continuar
+          </Button>
         </div>
       )}
 
       {/* Step 1: profesional */}
-      {step === 1 && service && (
+      {step === 1 && selectedServices.length > 0 && (
         <div className="animate-fade-in">
           <h1 className="text-xl font-semibold text-slate-900 mb-1">¿Con quién preferís atenderte?</h1>
-          <p className="text-sm text-slate-500 mb-5">Para {service.name.toLowerCase()}.</p>
+          <p className="text-sm text-slate-500 mb-5">Para {serviceNames.toLowerCase()}.</p>
           <div className="space-y-2.5">
             {availableProfessionals.map((p) => (
               <button
@@ -253,11 +311,11 @@ export function BookingWizard({
       )}
 
       {/* Step 2: fecha y hora */}
-      {step === 2 && service && professional && (
+      {step === 2 && selectedServices.length > 0 && professional && (
         <div className="animate-fade-in">
           <h1 className="text-xl font-semibold text-slate-900 mb-1">Elegí día y horario</h1>
           <p className="text-sm text-slate-500 mb-5">
-            {service.name} con {professional.name}
+            {serviceNames} con {professional.name}
           </p>
           <DayPicker value={date} onChange={setDate} maxAdvanceDays={clinic.maxAdvanceDays} />
 
@@ -303,7 +361,7 @@ export function BookingWizard({
       )}
 
       {/* Step 3: datos del paciente */}
-      {step === 3 && service && professional && time && (
+      {step === 3 && selectedServices.length > 0 && professional && time && (
         <div className="animate-fade-in">
           <h1 className="text-xl font-semibold text-slate-900 mb-1">Tus datos</h1>
           <p className="text-sm text-slate-500 mb-5">Los usamos para confirmar y recordarte el turno.</p>
@@ -311,7 +369,7 @@ export function BookingWizard({
           <div className="rounded-2xl bg-teal-50/60 border border-teal-100 p-3.5 mb-5 flex items-center gap-3 text-sm text-slate-700">
             <CalendarCheck2 className="size-4 text-[var(--brand)] shrink-0" />
             <span>
-              {formatDateMedium(date)} a las {time} · {service.name}
+              {formatDateMedium(date)} a las {time} · {serviceNames}
             </span>
           </div>
 
@@ -352,7 +410,7 @@ export function BookingWizard({
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
               />
             </div>
-            {professional.asksInsurance && professional.insuranceProviders.length > 0 && (
+            {insuranceProviders.length > 0 && (
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <div>
                   <Label htmlFor="insuranceProviderId">Obra social / prepaga</Label>
@@ -362,7 +420,7 @@ export function BookingWizard({
                     onChange={(e) => setForm((f) => ({ ...f, insuranceProviderId: e.target.value }))}
                   >
                     <option value="">Particular / sin cobertura</option>
-                    {professional.insuranceProviders.map((p) => (
+                    {insuranceProviders.map((p) => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </Select>
@@ -418,7 +476,7 @@ export function BookingWizard({
       )}
 
       {/* Step 4: confirmación */}
-      {step === 4 && result && service && professional && (
+      {step === 4 && result && selectedServices.length > 0 && professional && (
         <div className="animate-fade-in text-center py-6">
           <div className="size-16 rounded-full bg-teal-50 text-[var(--brand)] flex items-center justify-center mx-auto mb-5">
             <Check className="size-8" />
@@ -435,7 +493,7 @@ export function BookingWizard({
             </div>
             <div className="flex items-center gap-3">
               <Clock className="size-4 text-slate-400" />
-              <span className="text-sm text-slate-700">{time} hs · {service.name}</span>
+              <span className="text-sm text-slate-700">{time} hs · {serviceNames}</span>
             </div>
             <div className="flex items-center gap-3">
               <User className="size-4 text-slate-400" />

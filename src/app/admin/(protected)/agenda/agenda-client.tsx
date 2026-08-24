@@ -32,13 +32,15 @@ type AppointmentRow = {
   patientId: string;
   patientName: string;
   patientPhone: string;
-  serviceId: string;
+  serviceIds: string[];
   serviceName: string;
   insuranceProviderId: string | null;
   insuranceProviderName: string | null;
   insuranceMemberNumber: string | null;
   copaymentAmount: number | null;
 };
+
+type ServiceComboOption = { id: string; name: string | null; price: number | null; durationMin: number | null; serviceIds: string[] };
 
 type BlockedSlot = {
   date: string;
@@ -53,13 +55,15 @@ export function AgendaClient({
   appointments,
   blockedSlots,
   services,
+  combos,
   patients,
   insuranceProviders,
 }: {
   professionals: Professional[];
   appointments: AppointmentRow[];
   blockedSlots: BlockedSlot[];
-  services: { id: string; name: string; durationMin: number }[];
+  services: { id: string; name: string; durationMin: number; price: number }[];
+  combos: ServiceComboOption[];
   patients: { id: string; firstName: string; lastName: string; phone: string; dni: string | null }[];
   insuranceProviders: { id: string; name: string }[];
 }) {
@@ -96,7 +100,7 @@ export function AgendaClient({
       patientId: a.patientId,
       patientName: a.patientName,
       professionalId: a.professionalId,
-      serviceId: a.serviceId,
+      serviceIds: a.serviceIds,
       date: a.date,
       startTime: a.startTime,
       notes: a.notes,
@@ -241,6 +245,7 @@ export function AgendaClient({
         patients={patients}
         professionals={professionals}
         services={services}
+        combos={combos}
         insuranceProviders={insuranceProviders}
         initial={editing}
         defaultDate={date}

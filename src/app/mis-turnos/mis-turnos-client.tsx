@@ -149,7 +149,9 @@ export function MisTurnosClient({
                 <div key={a.id} className="rounded-2xl border border-slate-200 bg-white p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium text-slate-900 text-sm">{a.service.name}</p>
+                      <p className="font-medium text-slate-900 text-sm">
+                        {[a.service, ...a.extraServices].map((s) => s.name).join(" + ")}
+                      </p>
                       <p className="text-sm text-slate-500 mt-0.5">
                         {formatDateMedium(a.date)} a las {a.startTime} · {a.professional.name}
                       </p>

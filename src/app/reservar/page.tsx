@@ -11,7 +11,7 @@ export default async function ReservarPage({
   searchParams: Promise<{ servicio?: string }>;
 }) {
   const { servicio } = await searchParams;
-  const [clinic, services, professionals] = await Promise.all([
+  const [clinic, services, professionals, insuranceProviders, combos] = await Promise.all([
     prisma.clinic.findFirst(),
     prisma.service.findMany({
       where: { active: true },
@@ -20,7 +20,12 @@ export default async function ReservarPage({
     }),
     prisma.professional.findMany({
       where: { active: true },
-      include: { insuranceProviders: { where: { active: true } } },
+      orderBy: { order: "asc" },
+    }),
+    prisma.insuranceProvider.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+    prisma.serviceCombo.findMany({
+      where: { active: true },
+      include: { services: { select: { id: true } } },
       orderBy: { order: "asc" },
     }),
   ]);
@@ -40,8 +45,16 @@ export default async function ReservarPage({
     name: p.name,
     specialty: p.specialty,
     color: p.color,
-    asksInsurance: p.asksInsurance,
-    insuranceProviders: p.insuranceProviders.map((ip) => ({ id: ip.id, name: ip.name })),
+  }));
+
+  const insuranceProvidersDTO = insuranceProviders.map((ip) => ({ id: ip.id, name: ip.name }));
+
+  const combosDTO = combos.map((c) => ({
+    id: c.id,
+    name: c.name,
+    price: c.price,
+    durationMin: c.durationMin,
+    serviceIds: c.services.map((s) => s.id),
   }));
 
   return (
@@ -57,6 +70,8 @@ export default async function ReservarPage({
             <BookingWizard
               services={servicesDTO}
               professionals={professionalsDTO}
+              insuranceProviders={insuranceProvidersDTO}
+              combos={combosDTO}
               clinic={{
                 currency: clinic?.currency ?? "ARS",
                 maxAdvanceDays: clinic?.maxAdvanceDays ?? 60,

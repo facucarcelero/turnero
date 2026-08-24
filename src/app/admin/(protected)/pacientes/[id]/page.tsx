@@ -6,6 +6,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { formatDateShort } from "@/lib/time";
 import { initials, formatCurrency } from "@/lib/utils";
+import { computeTotals } from "@/lib/combo-totals";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
     include: {
       insuranceProvider: true,
       appointments: {
-        include: { service: true, professional: true, insuranceProvider: true },
+        include: { service: true, extraServices: true, combo: true, professional: true, insuranceProvider: true },
         orderBy: [{ date: "desc" }, { startTime: "desc" }],
       },
     },
@@ -25,7 +26,10 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
   if (!patient) notFound();
 
   const completed = patient.appointments.filter((a) => a.status === "COMPLETED");
-  const totalSpent = completed.reduce((sum, a) => sum + a.service.price, 0);
+  const totalSpent = completed.reduce(
+    (sum, a) => sum + computeTotals([a.service, ...a.extraServices], a.combo).totalPrice,
+    0
+  );
 
   return (
     <div className="space-y-5">
@@ -84,7 +88,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900">{formatDateShort(a.date)} · {a.startTime}</p>
                     <p className="text-xs text-slate-500 mt-0.5 truncate">
-                      {a.service.name} · {a.professional.name}
+                      {[a.service, ...a.extraServices].map((s) => s.name).join(" + ")} · {a.professional.name}
                       {a.insuranceProvider && ` · ${a.insuranceProvider.name}`}
                     </p>
                   </div>

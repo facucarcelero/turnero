@@ -6,21 +6,23 @@ import { Search, Plus, UserPlus } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea, FieldError } from "@/components/ui/field";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
+import { findMatchingCombo, computeTotals } from "@/lib/combo-totals";
 import { upsertAdminAppointment } from "@/lib/actions/appointments";
 import type { AppointmentStatus } from "@prisma/client";
 
 type Patient = { id: string; firstName: string; lastName: string; phone: string; dni: string | null };
 type Professional = { id: string; name: string };
-type Service = { id: string; name: string; durationMin: number };
+type Service = { id: string; name: string; durationMin: number; price: number };
 type InsuranceProvider = { id: string; name: string };
+type ServiceComboOption = { id: string; name: string | null; price: number | null; durationMin: number | null; serviceIds: string[] };
 
 export type EditableAppointment = {
   id: string;
   patientId: string;
   patientName: string;
   professionalId: string;
-  serviceId: string;
+  serviceIds: string[];
   date: string;
   startTime: string;
   notes: string | null;
@@ -44,6 +46,7 @@ export function AppointmentFormModal({
   patients,
   professionals,
   services,
+  combos,
   insuranceProviders,
   initial,
   defaultDate,
@@ -54,6 +57,7 @@ export function AppointmentFormModal({
   patients: Patient[];
   professionals: Professional[];
   services: Service[];
+  combos: ServiceComboOption[];
   insuranceProviders: InsuranceProvider[];
   initial?: EditableAppointment;
   defaultDate?: string;
@@ -68,7 +72,9 @@ export function AppointmentFormModal({
   const [professionalId, setProfessionalId] = useState(
     initial?.professionalId ?? defaultProfessionalId ?? professionals[0]?.id ?? ""
   );
-  const [serviceId, setServiceId] = useState(initial?.serviceId ?? services[0]?.id ?? "");
+  const [serviceIds, setServiceIds] = useState<string[]>(
+    initial?.serviceIds ?? (services[0] ? [services[0].id] : [])
+  );
   const [date, setDate] = useState(initial?.date ?? defaultDate ?? "");
   const [startTime, setStartTime] = useState(initial?.startTime ?? "09:00");
   const [status, setStatus] = useState<AppointmentStatus>(initial?.status ?? "CONFIRMED");
@@ -93,6 +99,14 @@ export function AppointmentFormModal({
       .slice(0, 8);
   }, [patientQuery, patients]);
 
+  const selectedServices = useMemo(() => services.filter((s) => serviceIds.includes(s.id)), [services, serviceIds]);
+  const matchingCombo = useMemo(() => findMatchingCombo(serviceIds, combos), [serviceIds, combos]);
+  const totals = useMemo(() => computeTotals(selectedServices, matchingCombo), [selectedServices, matchingCombo]);
+
+  function toggleService(id: string) {
+    setServiceIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
   function submit() {
     setError(null);
     if (!creatingNew && !patientId) {
@@ -107,6 +121,10 @@ export function AppointmentFormModal({
       setError("Elegí fecha y horario.");
       return;
     }
+    if (serviceIds.length === 0) {
+      setError("Elegí al menos un servicio.");
+      return;
+    }
 
     startTransition(async () => {
       const res = await upsertAdminAppointment({
@@ -114,7 +132,7 @@ export function AppointmentFormModal({
         patientId: creatingNew ? undefined : patientId,
         newPatient: creatingNew ? newPatient : undefined,
         professionalId,
-        serviceId,
+        serviceIds,
         date,
         startTime,
         notes,
@@ -227,23 +245,36 @@ export function AppointmentFormModal({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label>Profesional</Label>
-            <Select value={professionalId} onChange={(e) => setProfessionalId(e.target.value)}>
-              {professionals.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </Select>
+        <div>
+          <Label>Profesional</Label>
+          <Select value={professionalId} onChange={(e) => setProfessionalId(e.target.value)}>
+            {professionals.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label>Servicios</Label>
+          <div className="rounded-xl border border-slate-200 p-3 space-y-1.5 max-h-40 overflow-y-auto">
+            {services.map((s) => (
+              <label key={s.id} className="flex items-center gap-2.5 text-sm text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={serviceIds.includes(s.id)}
+                  onChange={() => toggleService(s.id)}
+                  className="size-4 rounded border-slate-300 text-[var(--brand)] focus:ring-[var(--brand)]/30"
+                />
+                {s.name} <span className="text-slate-400">({s.durationMin}min · {formatCurrency(s.price)})</span>
+              </label>
+            ))}
           </div>
-          <div>
-            <Label>Servicio</Label>
-            <Select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
-              {services.map((s) => (
-                <option key={s.id} value={s.id}>{s.name} ({s.durationMin}min)</option>
-              ))}
-            </Select>
-          </div>
+          {selectedServices.length > 0 && (
+            <p className="text-xs text-slate-500 mt-1.5">
+              Total: {totals.totalDurationMin} min · {formatCurrency(totals.totalPrice)}
+              {matchingCombo && " (combo)"}
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

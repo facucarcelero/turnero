@@ -10,6 +10,7 @@ import {
   Settings,
   UserCircle,
   ShieldCheck,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 
@@ -32,6 +33,9 @@ export function getNavItems(role: string, isLinkedProfessional: boolean): NavIte
     { href: "/admin/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/admin/turnos", label: "Turnos", icon: ClipboardList },
     { href: "/admin/pacientes", label: "Pacientes", icon: Users },
+    // Combinaciones de servicios con precio/duración propios: la puede
+    // gestionar cualquier rol (admin, secretaria o profesional autogestionado).
+    { href: "/admin/combos", label: "Combos", icon: Layers },
   ];
 
   if (isManager) {
