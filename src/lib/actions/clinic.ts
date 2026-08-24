@@ -93,8 +93,8 @@ export async function upsertAdminUser(payload: {
     }
     await prisma.adminUser.update({ where: { id: payload.id }, data });
   } else {
-    if (!payload.password?.trim() || payload.password.trim().length < 6) {
-      return { error: "La contraseña debe tener al menos 6 caracteres." };
+    if (!payload.password?.trim() || payload.password.trim().length < 8) {
+      return { error: "La contraseña debe tener al menos 8 caracteres." };
     }
     const existing = await prisma.adminUser.findUnique({ where: { email: payload.email.trim().toLowerCase() } });
     if (existing) return { error: "Ya existe un usuario con ese email." };
@@ -118,6 +118,13 @@ export async function deleteAdminUser(id: string) {
   await requireRole("OWNER");
   const count = await prisma.adminUser.count();
   if (count <= 1) return { error: "Debe existir al menos un usuario administrador." };
+
+  const target = await prisma.adminUser.findUnique({ where: { id } });
+  if (target?.role === "OWNER") {
+    const ownerCount = await prisma.adminUser.count({ where: { role: "OWNER" } });
+    if (ownerCount <= 1) return { error: "Debe existir al menos un usuario con rol Owner." };
+  }
+
   await prisma.adminUser.delete({ where: { id } });
   revalidatePath("/admin/configuracion");
   return { success: true };

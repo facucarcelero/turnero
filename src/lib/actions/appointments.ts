@@ -209,6 +209,16 @@ export async function cancelAppointmentByToken(token: string, reason?: string) {
   return { success: true };
 }
 
+const LOOKUP_LIMIT = 10;
+const LOOKUP_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Pública y sin login: cualquiera que sepa un DNI/teléfono puede ver esos
+ * turnos, así que (a) limitamos por IP para que no se puedan probar miles
+ * de DNIs/teléfonos en secuencia, y (b) devolvemos sólo los campos que la
+ * pantalla necesita — nunca el objeto Patient completo (que tiene email,
+ * fecha de nacimiento, obra social y número de afiliado).
+ */
 export async function findAppointmentsByContact(phone?: string, dni?: string) {
   const conditions = [
     phone?.trim() ? { patient: { phone: phone.trim() } } : undefined,
@@ -216,9 +226,22 @@ export async function findAppointmentsByContact(phone?: string, dni?: string) {
   ].filter(Boolean) as object[];
   if (conditions.length === 0) return [];
 
+  const ip = await clientIp();
+  const limit = await checkRateLimit(`mis-turnos:${ip}`, LOOKUP_LIMIT, LOOKUP_WINDOW_MS);
+  if (!limit.allowed) return [];
+
   const appointments = await prisma.appointment.findMany({
     where: { OR: conditions },
-    include: { service: true, extraServices: true, professional: true, patient: true },
+    select: {
+      id: true,
+      date: true,
+      startTime: true,
+      status: true,
+      cancelToken: true,
+      service: { select: { name: true } },
+      extraServices: { select: { name: true } },
+      professional: { select: { name: true } },
+    },
     orderBy: [{ date: "desc" }, { startTime: "desc" }],
     take: 30,
   });

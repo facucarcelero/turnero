@@ -41,8 +41,8 @@ export async function updateOwnProfessionalProfile(payload: {
 export async function updateOwnPassword(payload: { currentPassword: string; newPassword: string }) {
   const user = await getCurrentAdmin();
   if (!user) return { error: "Sesión inválida." };
-  if (!payload.newPassword || payload.newPassword.length < 6) {
-    return { error: "La nueva contraseña debe tener al menos 6 caracteres." };
+  if (!payload.newPassword || payload.newPassword.length < 8) {
+    return { error: "La nueva contraseña debe tener al menos 8 caracteres." };
   }
 
   const record = await prisma.adminUser.findUnique({ where: { id: user.id } });
