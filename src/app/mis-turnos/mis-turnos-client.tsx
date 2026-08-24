@@ -115,6 +115,10 @@ export function MisTurnosClient({
       <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
+            <Label htmlFor="dni">DNI</Label>
+            <Input id="dni" placeholder="Alcanza con uno de los dos" value={dni} onChange={(e) => setDni(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} />
+          </div>
+          <div>
             <Label htmlFor="phone">Teléfono</Label>
             <Input
               id="phone"
@@ -124,10 +128,6 @@ export function MisTurnosClient({
               onChange={(e) => setPhone(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && search()}
             />
-          </div>
-          <div>
-            <Label htmlFor="dni">DNI</Label>
-            <Input id="dni" placeholder="Alcanza con uno de los dos" value={dni} onChange={(e) => setDni(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} />
           </div>
         </div>
         <Button className="w-full mt-4" onClick={search} loading={searching}>
