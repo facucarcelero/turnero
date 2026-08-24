@@ -50,13 +50,15 @@ export default async function TurnosPage() {
           insuranceProviderName: a.insuranceProvider?.name ?? null,
           insuranceMemberNumber: a.insuranceMemberNumber,
           copaymentAmount: a.copaymentAmount,
+          insuranceVerified: a.insuranceVerified,
+          insuranceVerifiedUntil: a.insuranceVerifiedUntil,
         };
       })}
       professionals={professionals.map((p) => ({ id: p.id, name: p.name }))}
       services={services.map((s) => ({ id: s.id, name: s.name, durationMin: s.durationMin, price: s.price }))}
       combos={combos.map((c) => ({ id: c.id, name: c.name, price: c.price, durationMin: c.durationMin, serviceIds: c.services.map((s) => s.id) }))}
       patients={patients.map((p) => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, phone: p.phone, dni: p.dni }))}
-      insuranceProviders={insuranceProviders.map((p) => ({ id: p.id, name: p.name }))}
+      insuranceProviders={insuranceProviders.map((p) => ({ id: p.id, name: p.name, defaultCopayment: p.defaultCopayment }))}
     />
   );
 }

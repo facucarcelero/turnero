@@ -150,6 +150,9 @@ model InsuranceProvider {
   name          String
   active        Boolean        @default(true)
   order         Int            @default(0)
+  // Coseguro/copago habitual de esta cobertura: sólo un valor de referencia
+  // para autocompletar al cargar un turno; el staff lo puede corregir.
+  defaultCopayment Float?
   professionals Professional[] @relation("ProfessionalInsuranceProviders")
   patients      Patient[]
   appointments  Appointment[]
@@ -250,6 +253,11 @@ model Appointment {
   insuranceProviderId   String?
   insuranceMemberNumber String?
   copaymentAmount       Float?
+  // Marcado manualmente por el staff tras confirmar la cobertura (llamando
+  // a la obra social o revisando su portal). No hay forma de verificarlo
+  // automáticamente: cada obra social tiene su propio sistema interno.
+  insuranceVerified       Boolean          @default(false)
+  insuranceVerifiedUntil  String? // "2026-08-21", fecha de vencimiento informada
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
   // Igual a "professionalId|date|startTime" mientras el turno está activo

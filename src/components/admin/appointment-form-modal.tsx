@@ -14,7 +14,7 @@ import type { AppointmentStatus } from "@prisma/client";
 type Patient = { id: string; firstName: string; lastName: string; phone: string; dni: string | null };
 type Professional = { id: string; name: string };
 type Service = { id: string; name: string; durationMin: number; price: number };
-type InsuranceProvider = { id: string; name: string };
+type InsuranceProvider = { id: string; name: string; defaultCopayment: number | null };
 type ServiceComboOption = { id: string; name: string | null; price: number | null; durationMin: number | null; serviceIds: string[] };
 
 export type EditableAppointment = {
@@ -30,6 +30,8 @@ export type EditableAppointment = {
   insuranceProviderId: string | null;
   insuranceMemberNumber: string | null;
   copaymentAmount: number | null;
+  insuranceVerified: boolean;
+  insuranceVerifiedUntil: string | null;
 };
 
 const STATUS_OPTIONS: { value: AppointmentStatus; label: string }[] = [
@@ -82,6 +84,18 @@ export function AppointmentFormModal({
   const [insuranceProviderId, setInsuranceProviderId] = useState(initial?.insuranceProviderId ?? "");
   const [insuranceMemberNumber, setInsuranceMemberNumber] = useState(initial?.insuranceMemberNumber ?? "");
   const [copaymentAmount, setCopaymentAmount] = useState(initial?.copaymentAmount?.toString() ?? "");
+  const [insuranceVerified, setInsuranceVerified] = useState(initial?.insuranceVerified ?? false);
+  const [insuranceVerifiedUntil, setInsuranceVerifiedUntil] = useState(initial?.insuranceVerifiedUntil ?? "");
+
+  function selectInsurance(id: string) {
+    setInsuranceProviderId(id);
+    setInsuranceVerified(false);
+    setInsuranceVerifiedUntil("");
+    if (!copaymentAmount.trim()) {
+      const provider = insuranceProviders.find((p) => p.id === id);
+      if (provider?.defaultCopayment != null) setCopaymentAmount(provider.defaultCopayment.toString());
+    }
+  }
 
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -140,6 +154,8 @@ export function AppointmentFormModal({
         insuranceProviderId: insuranceProviderId || null,
         insuranceMemberNumber,
         copaymentAmount: copaymentAmount.trim() ? Number(copaymentAmount) : null,
+        insuranceVerified,
+        insuranceVerifiedUntil: insuranceVerifiedUntil.trim() || null,
       });
       if (res.error) {
         setError(res.error);
@@ -300,7 +316,7 @@ export function AppointmentFormModal({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label>Obra social</Label>
-            <Select value={insuranceProviderId} onChange={(e) => setInsuranceProviderId(e.target.value)}>
+            <Select value={insuranceProviderId} onChange={(e) => selectInsurance(e.target.value)}>
               <option value="">Particular</option>
               {insuranceProviders.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
@@ -313,17 +329,39 @@ export function AppointmentFormModal({
           </div>
         </div>
         {insuranceProviderId && (
-          <div>
-            <Label>Coseguro / copago ($, opcional)</Label>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Se completa cuando lo confirmás con la obra social"
-              value={copaymentAmount}
-              onChange={(e) => setCopaymentAmount(e.target.value)}
-            />
-          </div>
+          <>
+            <div>
+              <Label>Coseguro / copago ($, opcional)</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Se completa cuando lo confirmás con la obra social"
+                value={copaymentAmount}
+                onChange={(e) => setCopaymentAmount(e.target.value)}
+              />
+            </div>
+            <div className="rounded-xl border border-slate-200 p-3 space-y-2.5">
+              <label className="flex items-center gap-2.5 text-sm text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={insuranceVerified}
+                  onChange={(e) => setInsuranceVerified(e.target.checked)}
+                  className="size-4 rounded border-slate-300 text-[var(--brand)] focus:ring-[var(--brand)]/30"
+                />
+                Cobertura verificada (confirmada con la obra social)
+              </label>
+              <p className="text-xs text-slate-400">
+                No hay verificación automática: cada obra social tiene su propio sistema. Este tilde es un registro manual de que el staff ya lo chequeó.
+              </p>
+              {insuranceVerified && (
+                <div>
+                  <Label>Vence el (opcional)</Label>
+                  <Input type="date" value={insuranceVerifiedUntil} onChange={(e) => setInsuranceVerifiedUntil(e.target.value)} />
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         <div>

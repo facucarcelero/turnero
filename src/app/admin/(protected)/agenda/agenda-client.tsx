@@ -38,9 +38,18 @@ type AppointmentRow = {
   insuranceProviderName: string | null;
   insuranceMemberNumber: string | null;
   copaymentAmount: number | null;
+  insuranceVerified: boolean;
+  insuranceVerifiedUntil: string | null;
 };
 
 type ServiceComboOption = { id: string; name: string | null; price: number | null; durationMin: number | null; serviceIds: string[] };
+
+function insuranceWarning(a: Pick<AppointmentRow, "insuranceProviderId" | "insuranceVerified" | "insuranceVerifiedUntil">, today: string) {
+  if (!a.insuranceProviderId) return null;
+  if (!a.insuranceVerified) return "Cobertura sin verificar";
+  if (a.insuranceVerifiedUntil && a.insuranceVerifiedUntil < today) return "Cobertura vencida";
+  return null;
+}
 
 type BlockedSlot = {
   date: string;
@@ -65,9 +74,10 @@ export function AgendaClient({
   services: { id: string; name: string; durationMin: number; price: number }[];
   combos: ServiceComboOption[];
   patients: { id: string; firstName: string; lastName: string; phone: string; dni: string | null }[];
-  insuranceProviders: { id: string; name: string }[];
+  insuranceProviders: { id: string; name: string; defaultCopayment: number | null }[];
 }) {
   const [date, setDate] = useState(todayStr());
+  const today = todayStr();
   const [professionalId, setProfessionalId] = useState(professionals[0]?.id);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<EditableAppointment | undefined>(undefined);
@@ -108,6 +118,8 @@ export function AgendaClient({
       insuranceProviderId: a.insuranceProviderId,
       insuranceMemberNumber: a.insuranceMemberNumber,
       copaymentAmount: a.copaymentAmount,
+      insuranceVerified: a.insuranceVerified,
+      insuranceVerifiedUntil: a.insuranceVerifiedUntil,
     });
     setModalOpen(true);
   }
@@ -208,6 +220,7 @@ export function AgendaClient({
                 </div>
                 <div className="flex items-center gap-2 flex-wrap sm:justify-end">
                   {a.insuranceProviderName && <Badge color="blue">{a.insuranceProviderName}</Badge>}
+                  {insuranceWarning(a, today) && <Badge color="amber">{insuranceWarning(a, today)}</Badge>}
                   <StatusBadge status={a.status} />
                   {a.status === "PENDING" && (
                     <button onClick={() => quickStatus(a.id, "CONFIRMED")} className="rounded-lg p-1.5 text-teal-600 hover:bg-teal-50 cursor-pointer" title="Confirmar">

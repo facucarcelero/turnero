@@ -192,14 +192,15 @@ export async function cancelAppointmentByToken(token: string, reason?: string) {
   return { success: true };
 }
 
-export async function findAppointmentsByContact(phone: string, dni?: string) {
+export async function findAppointmentsByContact(phone?: string, dni?: string) {
+  const conditions = [
+    phone?.trim() ? { patient: { phone: phone.trim() } } : undefined,
+    dni?.trim() ? { patient: { dni: dni.trim() } } : undefined,
+  ].filter(Boolean) as object[];
+  if (conditions.length === 0) return [];
+
   const appointments = await prisma.appointment.findMany({
-    where: {
-      OR: [
-        { patient: { phone: phone.trim() } },
-        dni ? { patient: { dni: dni.trim() } } : undefined,
-      ].filter(Boolean) as object[],
-    },
+    where: { OR: conditions },
     include: { service: true, extraServices: true, professional: true, patient: true },
     orderBy: [{ date: "desc" }, { startTime: "desc" }],
     take: 30,
@@ -273,6 +274,8 @@ export type AdminAppointmentPayload = {
   insuranceProviderId?: string | null;
   insuranceMemberNumber?: string;
   copaymentAmount?: number | null;
+  insuranceVerified?: boolean;
+  insuranceVerifiedUntil?: string | null;
 };
 
 export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
@@ -289,6 +292,8 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
     insuranceProviderId,
     insuranceMemberNumber,
     copaymentAmount,
+    insuranceVerified,
+    insuranceVerifiedUntil,
   } = payload;
 
   const user = await getCurrentAdmin();
@@ -376,6 +381,8 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
           insuranceProviderId: insuranceProviderId || null,
           insuranceMemberNumber: insuranceMemberNumber?.trim() || null,
           copaymentAmount: copaymentAmount ?? null,
+          insuranceVerified: insuranceProviderId ? (insuranceVerified ?? false) : false,
+          insuranceVerifiedUntil: insuranceProviderId ? insuranceVerifiedUntil?.trim() || null : null,
           activeSlotKey: slotKeyFor(professionalId, date, startTime, status),
         },
       });
@@ -396,6 +403,8 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
           insuranceProviderId: insuranceProviderId || undefined,
           insuranceMemberNumber: insuranceMemberNumber?.trim() || undefined,
           copaymentAmount: copaymentAmount ?? undefined,
+          insuranceVerified: insuranceProviderId ? (insuranceVerified ?? false) : false,
+          insuranceVerifiedUntil: insuranceProviderId ? insuranceVerifiedUntil?.trim() || undefined : undefined,
           activeSlotKey: slotKeyFor(professionalId, date, startTime, status),
         },
       });

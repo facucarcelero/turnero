@@ -9,15 +9,17 @@ import { Modal } from "@/components/ui/modal";
 import { Input, Label, FieldError } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmButton } from "@/components/ui/confirm-button";
+import { formatCurrency } from "@/lib/utils";
 import { upsertInsuranceProvider, deleteInsuranceProvider, toggleInsuranceProviderActive } from "@/lib/actions/insurance";
 
-type ProviderRow = { id: string; name: string; active: boolean; usageCount: number };
+type ProviderRow = { id: string; name: string; active: boolean; usageCount: number; defaultCopayment: number | null };
 
 export function ObrasSocialesClient({ providers }: { providers: ProviderRow[] }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ProviderRow | undefined>(undefined);
   const [name, setName] = useState("");
   const [active, setActive] = useState(true);
+  const [defaultCopayment, setDefaultCopayment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -25,6 +27,7 @@ export function ObrasSocialesClient({ providers }: { providers: ProviderRow[] })
     setEditing(undefined);
     setName("");
     setActive(true);
+    setDefaultCopayment("");
     setModalOpen(true);
   }
 
@@ -32,13 +35,19 @@ export function ObrasSocialesClient({ providers }: { providers: ProviderRow[] })
     setEditing(p);
     setName(p.name);
     setActive(p.active);
+    setDefaultCopayment(p.defaultCopayment?.toString() ?? "");
     setModalOpen(true);
   }
 
   function submit() {
     setError(null);
     startTransition(async () => {
-      const res = await upsertInsuranceProvider({ id: editing?.id, name, active });
+      const res = await upsertInsuranceProvider({
+        id: editing?.id,
+        name,
+        active,
+        defaultCopayment: defaultCopayment.trim() ? Number(defaultCopayment) : null,
+      });
       if (res.error) {
         setError(res.error);
         return;
@@ -84,6 +93,9 @@ export function ObrasSocialesClient({ providers }: { providers: ProviderRow[] })
                 <li key={p.id} className="flex items-center gap-3 px-4 sm:px-5 py-3.5">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-slate-900 truncate">{p.name}</p>
+                    {p.defaultCopayment != null && (
+                      <p className="text-xs text-slate-400 mt-0.5">Coseguro habitual: {formatCurrency(p.defaultCopayment)}</p>
+                    )}
                   </div>
                   {p.usageCount > 0 && <Badge color="slate">{p.usageCount} en uso</Badge>}
                   <label className="flex items-center gap-1.5 cursor-pointer">
@@ -111,6 +123,17 @@ export function ObrasSocialesClient({ providers }: { providers: ProviderRow[] })
           <div>
             <Label>Nombre</Label>
             <Input placeholder="Ej: OSDE, PAMI, Swiss Medical..." value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <Label>Coseguro habitual ($, opcional)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Se autocompleta al cargar un turno con esta cobertura"
+              value={defaultCopayment}
+              onChange={(e) => setDefaultCopayment(e.target.value)}
+            />
           </div>
           <label className="flex items-center gap-2.5 text-sm text-slate-700 cursor-pointer">
             <input

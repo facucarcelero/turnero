@@ -4,19 +4,27 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/actions/guard";
 
-export async function upsertInsuranceProvider(payload: { id?: string; name: string; active: boolean }) {
+export async function upsertInsuranceProvider(payload: {
+  id?: string;
+  name: string;
+  active: boolean;
+  defaultCopayment?: number | null;
+}) {
   await requireRole("ADMIN");
   if (!payload.name.trim()) return { error: "El nombre es obligatorio." };
+
+  const defaultCopayment =
+    payload.defaultCopayment !== null && payload.defaultCopayment !== undefined ? payload.defaultCopayment : null;
 
   if (payload.id) {
     await prisma.insuranceProvider.update({
       where: { id: payload.id },
-      data: { name: payload.name.trim(), active: payload.active },
+      data: { name: payload.name.trim(), active: payload.active, defaultCopayment },
     });
   } else {
     const count = await prisma.insuranceProvider.count();
     await prisma.insuranceProvider.create({
-      data: { name: payload.name.trim(), active: payload.active, order: count },
+      data: { name: payload.name.trim(), active: payload.active, order: count, defaultCopayment },
     });
   }
 

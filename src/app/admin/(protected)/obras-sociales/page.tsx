@@ -19,6 +19,7 @@ export default async function ObrasSocialesPage() {
         name: p.name,
         active: p.active,
         usageCount: p._count.patients + p._count.appointments,
+        defaultCopayment: p.defaultCopayment,
       }))}
     />
   );

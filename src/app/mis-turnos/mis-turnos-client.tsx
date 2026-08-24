@@ -34,11 +34,11 @@ export function MisTurnosClient({
       const saved = localStorage.getItem(STORAGE_KEY);
       if (!saved) return;
       const { phone: savedPhone, dni: savedDni } = JSON.parse(saved) as { phone: string; dni: string };
-      if (savedPhone) {
+      if (savedPhone || savedDni) {
         // Precarga desde localStorage: patrón habitual para hidratar estado
         // desde una fuente externa al montar (ver booking-wizard.tsx).
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setPhone(savedPhone);
+        setPhone(savedPhone ?? "");
         setDni(savedDni ?? "");
         setRemembered(true);
         startSearch(async () => {
@@ -52,8 +52,8 @@ export function MisTurnosClient({
   }, []);
 
   function search() {
-    if (!phone.trim()) {
-      toast.error("Ingresá tu número de teléfono.");
+    if (!phone.trim() && !dni.trim()) {
+      toast.error("Ingresá tu teléfono o tu DNI.");
       return;
     }
     startSearch(async () => {
@@ -99,7 +99,7 @@ export function MisTurnosClient({
       <div className="flex items-start justify-between gap-3 mb-5">
         <div>
           <h1 className="text-xl font-semibold text-slate-900 mb-1">Mis turnos</h1>
-          <p className="text-sm text-slate-500">Buscá tus turnos con el teléfono que usaste al reservar.</p>
+          <p className="text-sm text-slate-500">Buscá tus turnos con tu teléfono o tu DNI.</p>
         </div>
         {remembered && (
           <button
@@ -126,8 +126,8 @@ export function MisTurnosClient({
             />
           </div>
           <div>
-            <Label htmlFor="dni">DNI (opcional)</Label>
-            <Input id="dni" value={dni} onChange={(e) => setDni(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} />
+            <Label htmlFor="dni">DNI</Label>
+            <Input id="dni" placeholder="Alcanza con uno de los dos" value={dni} onChange={(e) => setDni(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} />
           </div>
         </div>
         <Button className="w-full mt-4" onClick={search} loading={searching}>
@@ -141,10 +141,16 @@ export function MisTurnosClient({
             <p className="text-center text-sm text-slate-400 py-6">No encontramos turnos con esos datos.</p>
           ) : (
             results.map((a) => {
-              const canCancel =
-                allowCancelation &&
-                (a.status === "PENDING" || a.status === "CONFIRMED") &&
-                minutesFromNow(a.date, a.startTime) > cancelNoticeHours * 60;
+              const isActive = a.status === "PENDING" || a.status === "CONFIRMED";
+              const withinNotice = minutesFromNow(a.date, a.startTime) <= cancelNoticeHours * 60;
+              const canCancel = allowCancelation && isActive && !withinNotice;
+              const whyNot = !isActive
+                ? null
+                : !allowCancelation
+                  ? "La cancelación online está desactivada. Contactanos directamente para cancelar este turno."
+                  : withinNotice
+                    ? `Ya no se puede cancelar online: faltan menos de ${cancelNoticeHours}hs para el turno. Contactanos directamente si necesitás cancelarlo.`
+                    : null;
               return (
                 <div key={a.id} className="rounded-2xl border border-slate-200 bg-white p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -171,6 +177,9 @@ export function MisTurnosClient({
                       )}
                       Cancelar turno
                     </button>
+                  )}
+                  {!canCancel && whyNot && (
+                    <p className="mt-3 text-xs text-slate-400">{whyNot}</p>
                   )}
                 </div>
               );

@@ -33,9 +33,18 @@ type AppointmentRow = {
   insuranceProviderName: string | null;
   insuranceMemberNumber: string | null;
   copaymentAmount: number | null;
+  insuranceVerified: boolean;
+  insuranceVerifiedUntil: string | null;
 };
 
 type ServiceComboOption = { id: string; name: string | null; price: number | null; durationMin: number | null; serviceIds: string[] };
+
+function insuranceWarning(a: Pick<AppointmentRow, "insuranceProviderId" | "insuranceVerified" | "insuranceVerifiedUntil">, today: string) {
+  if (!a.insuranceProviderId) return null;
+  if (!a.insuranceVerified) return "Cobertura sin verificar";
+  if (a.insuranceVerifiedUntil && a.insuranceVerifiedUntil < today) return "Cobertura vencida";
+  return null;
+}
 
 const FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: "ALL", label: "Todos los estados" },
@@ -66,7 +75,7 @@ export function TurnosClient({
   services: { id: string; name: string; durationMin: number; price: number }[];
   combos: ServiceComboOption[];
   patients: { id: string; firstName: string; lastName: string; phone: string; dni: string | null }[];
-  insuranceProviders: { id: string; name: string }[];
+  insuranceProviders: { id: string; name: string; defaultCopayment: number | null }[];
 }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -112,6 +121,8 @@ export function TurnosClient({
       insuranceProviderId: a.insuranceProviderId,
       insuranceMemberNumber: a.insuranceMemberNumber,
       copaymentAmount: a.copaymentAmount,
+      insuranceVerified: a.insuranceVerified,
+      insuranceVerifiedUntil: a.insuranceVerifiedUntil,
     });
     setModalOpen(true);
   }
@@ -200,6 +211,7 @@ export function TurnosClient({
                 </div>
                 <div className="flex items-center gap-2 flex-wrap sm:justify-end">
                   {a.insuranceProviderName && <Badge color="blue">{a.insuranceProviderName}</Badge>}
+                  {insuranceWarning(a, today) && <Badge color="amber">{insuranceWarning(a, today)}</Badge>}
                   <StatusBadge status={a.status} />
                   {a.status === "PENDING" && (
                     <button
