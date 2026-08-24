@@ -36,12 +36,15 @@ export async function upsertInsuranceProvider(payload: {
 
 export async function deleteInsuranceProvider(id: string) {
   await requireRole("ADMIN");
-  const [appointments, patients] = await Promise.all([
+  const [appointments, patients, copayRules, providerAgreements, coverageVerifications] = await Promise.all([
     prisma.appointment.count({ where: { insuranceProviderId: id } }),
     prisma.patient.count({ where: { insuranceProviderId: id } }),
+    prisma.copayRule.count({ where: { insuranceProviderId: id } }),
+    prisma.providerAgreement.count({ where: { insuranceProviderId: id } }),
+    prisma.coverageVerification.count({ where: { insuranceProviderId: id } }),
   ]);
-  if (appointments > 0 || patients > 0) {
-    return { error: "No se puede eliminar: hay pacientes o turnos que la usan. Podés desactivarla." };
+  if (appointments > 0 || patients > 0 || copayRules > 0 || providerAgreements > 0 || coverageVerifications > 0) {
+    return { error: "No se puede eliminar: hay pacientes, turnos o configuración de cobertura que la usan. Podés desactivarla." };
   }
   await prisma.insuranceProvider.delete({ where: { id } });
   revalidatePath("/admin/obras-sociales");

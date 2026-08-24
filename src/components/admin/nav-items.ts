@@ -11,6 +11,7 @@ import {
   UserCircle,
   ShieldCheck,
   Layers,
+  Radar,
   type LucideIcon,
 } from "lucide-react";
 
@@ -42,7 +43,8 @@ export function getNavItems(role: string, isLinkedProfessional: boolean): NavIte
     items.push(
       { href: "/admin/servicios", label: "Servicios", icon: Stethoscope },
       { href: "/admin/profesionales", label: "Profesionales", icon: UserCog },
-      { href: "/admin/obras-sociales", label: "Obras sociales", icon: ShieldCheck }
+      { href: "/admin/obras-sociales", label: "Obras sociales", icon: ShieldCheck },
+      { href: "/admin/coberturas", label: "Coberturas", icon: Radar }
     );
   }
 

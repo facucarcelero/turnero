@@ -8,6 +8,7 @@ import { getAvailableSlots } from "@/lib/availability";
 import { resolveServiceCombo, computeTotals } from "@/lib/service-combo";
 import { getCurrentAdmin } from "@/lib/actions/guard";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { verifyCoverage, recordManualVerification } from "@/lib/coverage";
 import type { AppointmentStatus } from "@prisma/client";
 
 const BOOKING_LIMIT = 5;
@@ -172,6 +173,22 @@ export async function createPublicAppointment(payload: BookingPayload) {
   revalidatePath("/admin");
   revalidatePath("/admin/agenda");
   revalidatePath("/admin/turnos");
+
+  // Best-effort, no bloqueante: corre después de que la reserva ya
+  // confirmó, no toca activeSlotKey/rate limiting, y nunca puede demorar
+  // ni romper la respuesta al paciente. Como todo conector hoy es
+  // NOT_AVAILABLE, sólo deja auditoría; insuranceVerified sigue en false
+  // como siempre.
+  if (validInsuranceId) {
+    verifyCoverage({
+      insuranceProviderId: validInsuranceId,
+      memberNumber: insuranceMemberNumber,
+      professionalId,
+      appointmentId: appointment.id,
+      patientId: appointment.patientId,
+      source: "ONLINE",
+    }).catch(() => {});
+  }
 
   return { success: true, appointmentId: appointment.id, cancelToken: appointment.cancelToken };
 }
@@ -363,6 +380,7 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
     return { error: "Ese horario se superpone con otro turno existente." };
   }
 
+  let savedAppointmentId = id;
   try {
     if (id) {
       await prisma.appointment.update({
@@ -387,7 +405,7 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
         },
       });
     } else {
-      await prisma.appointment.create({
+      const created = await prisma.appointment.create({
         data: {
           patientId: finalPatientId,
           professionalId,
@@ -408,12 +426,29 @@ export async function upsertAdminAppointment(payload: AdminAppointmentPayload) {
           activeSlotKey: slotKeyFor(professionalId, date, startTime, status),
         },
       });
+      savedAppointmentId = created.id;
     }
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       return { error: "Ese horario ya está ocupado por otro turno activo." };
     }
     throw err;
+  }
+
+  // Auditoría del motor de cobertura: no cambia ningún valor guardado
+  // arriba (los mismos insuranceVerified/insuranceVerifiedUntil de siempre),
+  // sólo deja registro trazable de la confirmación manual del staff. Un
+  // fallo acá nunca debe hacer fallar la carga del turno.
+  if (insuranceProviderId) {
+    await recordManualVerification({
+      insuranceProviderId,
+      insuranceVerified: insuranceVerified ?? false,
+      insuranceVerifiedUntil,
+      memberNumber: insuranceMemberNumber,
+      staffUserId: user.id,
+      appointmentId: savedAppointmentId,
+      patientId: finalPatientId,
+    }).catch(() => {});
   }
 
   revalidatePath("/admin");

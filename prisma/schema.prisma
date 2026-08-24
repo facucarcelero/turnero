@@ -34,6 +34,42 @@ enum AdminRole {
   STAFF
 }
 
+// Estados normalizados de una verificación de cobertura. NOT_AVAILABLE/
+// SOURCE_UNAVAILABLE/UNKNOWN/MANUAL_VERIFICATION_REQUIRED nunca deben
+// mostrarse al staff como "cobertura activa" (ver COVERAGE_ENGINE.md).
+enum CoverageState {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+  SUSPENDED
+  NOT_FOUND
+  AUTHORIZATION_REQUIRED
+  NOT_COVERED
+  SOURCE_UNAVAILABLE
+  UNKNOWN
+  MANUAL_VERIFICATION_REQUIRED
+}
+
+// Disponibilidad del conector que produjo una CoverageVerification. Hoy
+// todos los conectores son NOT_AVAILABLE (sin integración oficial real);
+// ver src/lib/coverage/providers/unavailable-provider.ts.
+enum CoverageConnectorStatus {
+  NOT_AVAILABLE
+  AVAILABLE
+  DEGRADED
+}
+
+// Estado del convenio/registro oficial de un profesional con una obra
+// social (RNP u homólogo), separado de la simple lista "la acepto en el
+// wizard" (Professional.insuranceProviders).
+enum ProviderAgreementStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+  TERMINATED
+  UNKNOWN
+}
+
 // ============================================================
 // CLINIC / CONFIGURATION (singleton row, id = 1)
 // ============================================================
@@ -76,6 +112,7 @@ model AdminUser {
   // restringido a su propia agenda, horarios y datos de perfil.
   professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: SetNull)
   professionalId String?       @unique
+  coverageVerifications CoverageVerification[]
   createdAt      DateTime      @default(now())
 }
 
@@ -101,6 +138,8 @@ model Professional {
   // ve ese paso y todo se trata como particular (comportamiento de siempre).
   asksInsurance      Boolean             @default(false)
   insuranceProviders InsuranceProvider[] @relation("ProfessionalInsuranceProviders")
+  copayRules         CopayRule[]
+  providerAgreements ProviderAgreement[]
   createdAt          DateTime            @default(now())
 }
 
@@ -121,6 +160,7 @@ model Service {
   appointments         Appointment[]
   extraForAppointments Appointment[]  @relation("AppointmentExtraServices")
   combos               ServiceCombo[] @relation("ComboServices")
+  copayRules           CopayRule[]
   createdAt            DateTime       @default(now())
 }
 
@@ -153,9 +193,16 @@ model InsuranceProvider {
   // Coseguro/copago habitual de esta cobertura: sólo un valor de referencia
   // para autocompletar al cargar un turno; el staff lo puede corregir.
   defaultCopayment Float?
+  // Clave del conector del motor de cobertura (ej. "PAMI", "OSDE"). Null =
+  // sin integración conocida, se resuelve siempre al conector genérico "no
+  // disponible". No afecta nada del comportamiento actual del wizard/admin.
+  connectorKey  String?
   professionals Professional[] @relation("ProfessionalInsuranceProviders")
   patients      Patient[]
   appointments  Appointment[]
+  copayRules    CopayRule[]
+  providerAgreements   ProviderAgreement[]
+  coverageVerifications CoverageVerification[]
   createdAt     DateTime       @default(now())
 }
 
@@ -212,6 +259,7 @@ model Patient {
   insuranceProviderId   String?
   insuranceMemberNumber String?
   appointments          Appointment[]
+  coverageVerifications CoverageVerification[]
   createdAt             DateTime           @default(now())
 
   @@index([phone])
@@ -258,6 +306,7 @@ model Appointment {
   // automáticamente: cada obra social tiene su propio sistema interno.
   insuranceVerified       Boolean          @default(false)
   insuranceVerifiedUntil  String? // "2026-08-21", fecha de vencimiento informada
+  coverageVerifications CoverageVerification[]
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
   // Igual a "professionalId|date|startTime" mientras el turno está activo
@@ -279,4 +328,86 @@ model RateLimitEntry {
   key         String   @id // ej: "login:email@x.com" o "booking:190.1.2.3"
   count       Int      @default(1)
   windowStart DateTime @default(now())
+}
+
+// ============================================================
+// COVERAGE ENGINE (motor de verificación de cobertura)
+//
+// Módulo desacoplado: formaliza y audita lo que hoy es un chequeo manual
+// (ver Appointment.insuranceVerified) sin reemplazarlo. Ningún organismo
+// (SSSalud/PAMI/IOMA/prepagas) publica hoy una API oficial abierta para
+// verificar cobertura por software desde una clínica privada — ver
+// COVERAGE_ENGINE.md. Por eso todo conector real vive en
+// src/lib/coverage/providers/ como un stub NOT_AVAILABLE hasta que exista
+// un mecanismo oficial documentado y la clínica esté autorizada a usarlo.
+// ============================================================
+
+// Registro de auditoría de cada verificación de cobertura, manual o
+// automática. Nunca guarda el DNI ni el número de afiliado completos (ver
+// src/lib/coverage/domain/redact.ts) ni tokens/credenciales.
+model CoverageVerification {
+  id                  String                  @id @default(cuid())
+  appointment         Appointment?            @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  appointmentId       String?
+  patient             Patient?                @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  patientId           String?
+  insuranceProvider   InsuranceProvider?      @relation(fields: [insuranceProviderId], references: [id], onDelete: SetNull)
+  insuranceProviderId String?
+  requestedBy         AdminUser?              @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedById       String?
+  source              AppointmentSource
+  state               CoverageState
+  connectorStatus     CoverageConnectorStatus @default(NOT_AVAILABLE)
+  sourceId            String // "UNAVAILABLE_OFFICIAL:PAMI" | "MANUAL_STAFF" | futuro conector real
+  memberNumberMasked  String? // sólo últimos 4 dígitos, nunca el número completo
+  suggestedCopaymentAmount Decimal?           @db.Decimal(10, 2)
+  durationMs          Int?
+  message             String? // texto seguro para mostrar al staff, sin PII adicional
+  createdAt           DateTime                @default(now())
+
+  @@index([insuranceProviderId, createdAt])
+  @@index([appointmentId])
+  @@index([patientId])
+}
+
+// Regla de coseguro con alcance fino (obra social + profesional + servicio
+// opcionales). No reemplaza InsuranceProvider.defaultCopayment: la
+// resolución cae en ese valor cuando ninguna regla matchea (ver
+// src/lib/coverage/domain/copay-resolution.ts).
+model CopayRule {
+  id                  String             @id @default(cuid())
+  insuranceProvider   InsuranceProvider  @relation(fields: [insuranceProviderId], references: [id], onDelete: Cascade)
+  insuranceProviderId String
+  professional        Professional?      @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  professionalId      String?
+  service             Service?           @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  serviceId           String?
+  planName            String? // texto libre (ej. "OSDE 210"): no hay catálogo de planes por obra social
+  copaymentAmount     Decimal            @db.Decimal(10, 2)
+  active              Boolean            @default(true)
+  notes               String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([insuranceProviderId, professionalId, serviceId])
+}
+
+// Convenio/registro oficial de un profesional con una obra social (estado
+// RNP u homólogo), separado a propósito de la relación M2M simple
+// Professional.insuranceProviders (que sólo dice "la acepto en el wizard").
+model ProviderAgreement {
+  id                  String                   @id @default(cuid())
+  professional        Professional             @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  professionalId      String
+  insuranceProvider   InsuranceProvider        @relation(fields: [insuranceProviderId], references: [id], onDelete: Cascade)
+  insuranceProviderId String
+  status              ProviderAgreementStatus  @default(UNKNOWN)
+  rnpCode             String? // código de Registro Nacional de Prestadores u homólogo, formato libre
+  effectiveFrom       DateTime?
+  effectiveTo         DateTime?
+  notes               String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  @@unique([professionalId, insuranceProviderId])
 }
